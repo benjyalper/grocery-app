@@ -190,6 +190,19 @@ body {
 .btn-ghost:hover {
   background: rgba(255,255,255,0.22);
 }
+.btn-whatsapp {
+  background: #25D366;
+  color: white;
+  border: none;
+}
+.btn-whatsapp:hover {
+  background: #1ebe5d;
+}
+.btn-copied {
+  background: #d1fae5;
+  color: #065f46;
+  border: 1.5px solid #6ee7b7;
+}
 
 .btn-cancel {
   background: var(--gray-100);

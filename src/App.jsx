@@ -30,7 +30,8 @@ function App() {
   const [search, setSearch]         = useState('');
   const [showModal, setShowModal]   = useState(false);
   const [editingItem, setEditingItem] = useState(null);
-  const [wordLoading, setWordLoading] = useState(false);
+  const [wordLoading, setWordLoading]   = useState(false);
+  const [copyLabel, setCopyLabel]       = useState('העתק');
   // 'idle' | 'loading' | 'ok' | 'offline'
   const [dbStatus, setDbStatus]     = useState('idle');
 
@@ -162,6 +163,41 @@ function App() {
   // ─── Print & Word ─────────────────────────────────────────────
   const handlePrint = () => window.print();
 
+  // ─── Copy as plain text (WhatsApp-friendly) ───────────────────
+  const handleCopy = async () => {
+    const activeItems = items.filter((i) => i.quantity > 0);
+    const dateStr = new Date().toLocaleDateString('he-IL', {
+      year: 'numeric', month: 'long', day: 'numeric',
+    });
+
+    const lines = [
+      `🛒 רשימת קניות — ${dateStr}`,
+      '',
+      ...activeItems.map((i) => {
+        const check = i.completed ? '✅' : '🔲';
+        const qty   = `${i.quantity} ${i.unit || 'יח׳'}`;
+        return `${check} ${i.name} — ${qty}`;
+      }),
+    ];
+
+    try {
+      await navigator.clipboard.writeText(lines.join('\n'));
+      setCopyLabel('✓ הועתק!');
+      setTimeout(() => setCopyLabel('העתק'), 2200);
+    } catch {
+      // Fallback for browsers/iOS that block clipboard without interaction
+      const ta = document.createElement('textarea');
+      ta.value = lines.join('\n');
+      ta.style.cssText = 'position:fixed;opacity:0;';
+      document.body.appendChild(ta);
+      ta.focus(); ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      setCopyLabel('✓ הועתק!');
+      setTimeout(() => setCopyLabel('העתק'), 2200);
+    }
+  };
+
   const handleWordExport = async () => {
     setWordLoading(true);
     try   { await exportToWord(items); }
@@ -212,6 +248,13 @@ function App() {
               title="הורד מסמך Word"
             >
               <span>📄</span><span className="btn-label">{wordLoading ? '...' : 'Word'}</span>
+            </button>
+            <button
+              className={`btn ${copyLabel.startsWith('✓') ? 'btn-copied' : 'btn-whatsapp'}`}
+              onClick={handleCopy}
+              title="העתק רשימה לוואטסאפ"
+            >
+              <span>📋</span><span className="btn-label">{copyLabel}</span>
             </button>
             <button className="btn btn-white" onClick={openAdd}>
               <span>+</span><span className="btn-label">הוסף פריט</span>
