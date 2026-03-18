@@ -420,6 +420,69 @@ body {
   border-radius: 20px;
 }
 
+/* ── Unit toggle pill (on each item row) ── */
+.unit-toggle {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.1rem 0.45rem;
+  border-radius: 20px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  border: 1.5px solid;
+  transition: all 0.15s;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+.unit-toggle--unit {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  color: #1d4ed8;
+}
+.unit-toggle--unit:hover {
+  background: #dbeafe;
+  border-color: #93c5fd;
+}
+.unit-toggle--kg {
+  background: #fdf4ff;
+  border-color: #e9d5ff;
+  color: #7c3aed;
+}
+.unit-toggle--kg:hover {
+  background: #f3e8ff;
+  border-color: #d8b4fe;
+}
+
+/* ── Unit selector in modal ── */
+.unit-selector {
+  display: flex;
+  gap: 0.5rem;
+}
+.unit-option {
+  flex: 1;
+  padding: 0.55rem 0.5rem;
+  border-radius: var(--radius);
+  border: 1.5px solid var(--gray-200);
+  background: var(--gray-50);
+  color: var(--gray-600);
+  font-size: 0.85rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: center;
+}
+.unit-option:hover {
+  border-color: var(--green-400);
+  color: var(--green-700);
+}
+.unit-option.active {
+  background: var(--green-600);
+  border-color: var(--green-600);
+  color: white;
+}
+
 /* Inline price editing */
 .item-unit-price {
   font-size: 0.75rem;

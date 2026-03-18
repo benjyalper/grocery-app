@@ -61,7 +61,7 @@ export async function exportToWord(items) {
     children: [
       makeCell('שם פריט', { bold: true }),
       makeCell('כמות', { bold: true }),
-      makeCell('מחיר ליחידה', { bold: true }),
+      makeCell('מחיר / יחידה', { bold: true }),
       makeCell('סה״כ לפריט', { bold: true }),
     ],
   });
@@ -73,8 +73,8 @@ export async function exportToWord(items) {
     return new TableRow({
       children: [
         makeCell(item.name + status),
-        makeCell(String(item.quantity)),
-        makeCell(`\u20AA${item.price.toFixed(2)}`),
+        makeCell(String(item.quantity) + ' ' + (item.unit || 'יח׳')),
+        makeCell(`\u20AA${item.price.toFixed(2)} / ${item.unit || 'יח׳'}`),
         makeCell(`\u20AA${subtotal}`),
       ],
     });

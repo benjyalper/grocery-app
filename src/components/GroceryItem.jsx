@@ -1,10 +1,14 @@
 import React, { useState, useRef } from 'react';
 
+const UNITS = ['יח׳', 'ק"ג'];
+
 /**
  * רכיב פריט ברשימת הקניות
- * מציג שם, כמות, מחיר ליחידה (ניתן לעריכה ישירה), סה"כ לפריט, וכפתורי פעולה
+ * מציג שם, כמות, יחידה (יח׳/ק"ג), מחיר ליחידה (ניתן לעריכה), סה"כ לפריט
  */
 function GroceryItem({ item, onRemove, onUpdate, onToggle, onEdit }) {
+  // fallback for items saved before unit was added
+  const unit = item.unit || 'יח׳';
   const subtotal = (item.price * item.quantity).toFixed(2);
 
   // ─── Inline price editing ────────────────────────────────────
@@ -15,15 +19,12 @@ function GroceryItem({ item, onRemove, onUpdate, onToggle, onEdit }) {
   const startPriceEdit = () => {
     setPriceVal(String(item.price));
     setEditingPrice(true);
-    // focus after render
     setTimeout(() => priceInputRef.current?.select(), 30);
   };
 
   const commitPrice = () => {
     const parsed = parseFloat(priceVal);
-    if (!isNaN(parsed) && parsed >= 0) {
-      onUpdate(item.id, { price: parsed });
-    }
+    if (!isNaN(parsed) && parsed >= 0) onUpdate(item.id, { price: parsed });
     setEditingPrice(false);
   };
 
@@ -32,18 +33,16 @@ function GroceryItem({ item, onRemove, onUpdate, onToggle, onEdit }) {
     if (e.key === 'Escape') setEditingPrice(false);
   };
 
+  // ─── Unit toggle ─────────────────────────────────────────────
+  const toggleUnit = () => {
+    const next = unit === 'יח׳' ? 'ק"ג' : 'יח׳';
+    onUpdate(item.id, { unit: next });
+  };
+
   // ─── Quantity controls ───────────────────────────────────────
   const handleQtyChange = (e) => {
     const val = parseInt(e.target.value, 10);
     if (!isNaN(val) && val >= 1) onUpdate(item.id, { quantity: val });
-  };
-
-  const decrement = () => {
-    if (item.quantity > 1) onUpdate(item.id, { quantity: item.quantity - 1 });
-  };
-
-  const increment = () => {
-    onUpdate(item.id, { quantity: item.quantity + 1 });
   };
 
   return (
@@ -60,15 +59,21 @@ function GroceryItem({ item, onRemove, onUpdate, onToggle, onEdit }) {
 
       {/* ── Item details ── */}
       <div className="item-content">
-        <div
-          className="item-name"
-          onClick={() => onEdit(item)}
-          title="לחץ לעריכה"
-        >
+        <div className="item-name" onClick={() => onEdit(item)} title="לחץ לעריכה">
           {item.name}
         </div>
 
         <div className="item-meta">
+          {/* Unit toggle pill */}
+          <button
+            className={`unit-toggle unit-toggle--${unit === 'ק"ג' ? 'kg' : 'unit'}`}
+            onClick={toggleUnit}
+            title={`החלף ל${unit === 'יח׳' ? 'ק"ג' : 'יח׳'}`}
+            aria-label={`יחידה: ${unit} — לחץ להחלפה`}
+          >
+            {unit}
+          </button>
+
           {/* Inline-editable price */}
           {editingPrice ? (
             <span className="price-edit-wrap">
@@ -86,7 +91,7 @@ function GroceryItem({ item, onRemove, onUpdate, onToggle, onEdit }) {
                 aria-label="עריכת מחיר"
                 dir="ltr"
               />
-              <span className="price-edit-label">/ יח׳</span>
+              <span className="price-edit-label">/ {unit}</span>
             </span>
           ) : (
             <span
@@ -96,9 +101,8 @@ function GroceryItem({ item, onRemove, onUpdate, onToggle, onEdit }) {
               role="button"
               tabIndex={0}
               onKeyDown={(e) => e.key === 'Enter' && startPriceEdit()}
-              aria-label={`מחיר: ₪${item.price} — לחץ לעריכה`}
             >
-              ₪{item.price.toFixed(2)} / יח׳ ✏️
+              ₪{item.price.toFixed(2)} / {unit} ✏️
             </span>
           )}
 
@@ -108,7 +112,7 @@ function GroceryItem({ item, onRemove, onUpdate, onToggle, onEdit }) {
 
       {/* ── Quantity ── */}
       <div className="qty-controls no-print">
-        <button className="qty-btn" onClick={decrement} aria-label="הפחת כמות">−</button>
+        <button className="qty-btn" onClick={() => item.quantity > 1 && onUpdate(item.id, { quantity: item.quantity - 1 })} aria-label="הפחת כמות">−</button>
         <input
           className="qty-input"
           type="number"
@@ -117,30 +121,16 @@ function GroceryItem({ item, onRemove, onUpdate, onToggle, onEdit }) {
           onChange={handleQtyChange}
           aria-label="כמות"
         />
-        <button className="qty-btn" onClick={increment} aria-label="הגדל כמות">+</button>
+        <button className="qty-btn" onClick={() => onUpdate(item.id, { quantity: item.quantity + 1 })} aria-label="הגדל כמות">+</button>
       </div>
 
       {/* כמות להדפסה */}
-      <div className="qty-print print-only">x{item.quantity}</div>
+      <div className="qty-print print-only">x{item.quantity} {unit}</div>
 
       {/* ── Actions ── */}
       <div className="item-actions no-print">
-        <button
-          className="action-btn edit-btn"
-          onClick={() => onEdit(item)}
-          title="ערוך פריט"
-          aria-label="ערוך פריט"
-        >
-          ✏️
-        </button>
-        <button
-          className="action-btn remove-btn"
-          onClick={() => onRemove(item.id)}
-          title="הסר פריט"
-          aria-label="הסר פריט"
-        >
-          🗑️
-        </button>
+        <button className="action-btn edit-btn" onClick={() => onEdit(item)} title="ערוך פריט" aria-label="ערוך פריט">✏️</button>
+        <button className="action-btn remove-btn" onClick={() => onRemove(item.id)} title="הסר פריט" aria-label="הסר פריט">🗑️</button>
       </div>
     </div>
   );

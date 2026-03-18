@@ -4,7 +4,7 @@ import GroceryItem from './components/GroceryItem';
 import ItemModal from './components/ItemModal';
 import { exportToWord } from './utils/wordExport';
 
-const STORAGE_KEY = 'grocery-items-v1';
+const STORAGE_KEY = 'grocery-items-v2'; // bumped: added unit field
 
 /**
  * יוצר מזהה ייחודי לפריט חדש

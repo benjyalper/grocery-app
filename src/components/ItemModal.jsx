@@ -7,18 +7,17 @@ import React, { useState, useEffect, useRef } from 'react';
 function ItemModal({ item, onSave, onClose }) {
   const isEditing = !!item;
 
-  const [name, setName] = useState(item?.name || '');
+  const [name, setName]         = useState(item?.name     || '');
   const [quantity, setQuantity] = useState(item?.quantity ?? 1);
-  const [price, setPrice] = useState(item?.price ?? 0);
+  const [price, setPrice]       = useState(item?.price    ?? 0);
+  const [unit, setUnit]         = useState(item?.unit     || 'יח׳');
 
   const nameRef = useRef(null);
 
-  // Focus on name input when modal opens
   useEffect(() => {
     setTimeout(() => nameRef.current?.focus(), 50);
   }, []);
 
-  // Close on Escape key
   useEffect(() => {
     const handler = (e) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', handler);
@@ -28,16 +27,12 @@ function ItemModal({ item, onSave, onClose }) {
   const handleSubmit = (e) => {
     e.preventDefault();
     const trimmed = name.trim();
-    if (!trimmed) {
-      nameRef.current?.focus();
-      return;
-    }
+    if (!trimmed) { nameRef.current?.focus(); return; }
     const qty = Math.max(1, parseInt(quantity, 10) || 1);
-    const pr = Math.max(0, parseFloat(price) || 0);
-    onSave({ name: trimmed, quantity: qty, price: pr });
+    const pr  = Math.max(0, parseFloat(price)     || 0);
+    onSave({ name: trimmed, quantity: qty, price: pr, unit });
   };
 
-  // Close when clicking the backdrop
   const handleBackdropClick = (e) => {
     if (e.target === e.currentTarget) onClose();
   };
@@ -70,6 +65,27 @@ function ItemModal({ item, onSave, onClose }) {
             />
           </div>
 
+          {/* יחידת מחיר */}
+          <div className="form-group">
+            <label className="form-label">מחיר לפי</label>
+            <div className="unit-selector">
+              <button
+                type="button"
+                className={`unit-option${unit === 'יח׳' ? ' active' : ''}`}
+                onClick={() => setUnit('יח׳')}
+              >
+                יח׳ — ליחידה
+              </button>
+              <button
+                type="button"
+                className={`unit-option${unit === 'ק"ג' ? ' active' : ''}`}
+                onClick={() => setUnit('ק"ג')}
+              >
+                ק״ג — לקילו
+              </button>
+            </div>
+          </div>
+
           {/* כמות ומחיר */}
           <div className="form-row">
             <div className="form-group">
@@ -85,7 +101,9 @@ function ItemModal({ item, onSave, onClose }) {
               />
             </div>
             <div className="form-group">
-              <label className="form-label" htmlFor="item-price">מחיר משוער (₪)</label>
+              <label className="form-label" htmlFor="item-price">
+                מחיר משוער (₪ / {unit})
+              </label>
               <input
                 id="item-price"
                 className="form-input"
