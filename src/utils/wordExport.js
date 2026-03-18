@@ -13,7 +13,6 @@ import {
   TableCell,
   AlignmentType,
   WidthType,
-  HeadingLevel,
 } from 'docx';
 import { saveAs } from 'file-saver';
 
@@ -56,58 +55,28 @@ export async function exportToWord(items) {
 
   // פריטים עם כמות 0 לא נכללים במסמך
   const activeItems = items.filter((item) => item.quantity > 0);
-  const total = activeItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
-  // שורת כותרת
+  // שורת כותרת — שם פריט + כמות בלבד
   const headerRow = new TableRow({
     children: [
       makeCell('שם פריט', { bold: true }),
       makeCell('כמות', { bold: true }),
-      makeCell('מחיר / יחידה', { bold: true }),
-      makeCell('סה״כ לפריט', { bold: true }),
     ],
   });
 
   // שורות פריטים (רק פריטים עם כמות > 0)
   const itemRows = activeItems.map((item) => {
-    const subtotal = (item.price * item.quantity).toFixed(2);
     const status = item.completed ? ' ✓' : '';
     return new TableRow({
       children: [
         makeCell(item.name + status),
         makeCell(String(item.quantity) + ' ' + (item.unit || 'יח׳')),
-        makeCell(`\u20AA${item.price.toFixed(2)} / ${item.unit || 'יח׳'}`),
-        makeCell(`\u20AA${subtotal}`),
       ],
     });
   });
 
-  // שורת סה"כ
-  const totalRow = new TableRow({
-    children: [
-      new TableCell({
-        columnSpan: 3,
-        children: [
-          new Paragraph({
-            children: [
-              new TextRun({
-                text: 'סה״כ כללי משוער',
-                bold: true,
-                rightToLeft: true,
-                font: 'David',
-              }),
-            ],
-            alignment: AlignmentType.RIGHT,
-            bidirectional: true,
-          }),
-        ],
-      }),
-      makeCell(`\u20AA${total.toFixed(2)}`, { bold: true }),
-    ],
-  });
-
   const table = new Table({
-    rows: [headerRow, ...itemRows, totalRow],
+    rows: [headerRow, ...itemRows],
     width: { size: 100, type: WidthType.PERCENTAGE },
   });
 
@@ -149,23 +118,6 @@ export async function exportToWord(items) {
 
           // טבלת פריטים
           table,
-
-          // הערת מחירים
-          new Paragraph({
-            children: [
-              new TextRun({
-                text: '* המחירים המוצגים הם הערכות בלבד על פי מחירים ממוצעים בסופרמרקטים בישראל',
-                size: 18,
-                italics: true,
-                color: '9ca3af',
-                rightToLeft: true,
-                font: 'David',
-              }),
-            ],
-            alignment: AlignmentType.RIGHT,
-            bidirectional: true,
-            spacing: { before: 300 },
-          }),
         ],
       },
     ],
