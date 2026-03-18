@@ -1,20 +1,17 @@
 import React, { useState, useRef } from 'react';
 
-const UNITS = ['יח׳', 'ק"ג'];
-
 /**
  * רכיב פריט ברשימת הקניות
  * מציג שם, כמות, יחידה (יח׳/ק"ג), מחיר ליחידה (ניתן לעריכה), סה"כ לפריט
  */
-function GroceryItem({ item, onRemove, onUpdate, onToggle, onEdit }) {
-  // fallback for items saved before unit was added
-  const unit = item.unit || 'יח׳';
+function GroceryItem({ item, onRemove, onUpdate, onEdit }) {
+  const unit     = item.unit || 'יח׳';
   const subtotal = (item.price * item.quantity).toFixed(2);
 
   // ─── Inline price editing ────────────────────────────────────
   const [editingPrice, setEditingPrice] = useState(false);
-  const [priceVal, setPriceVal] = useState(String(item.price));
-  const priceInputRef = useRef(null);
+  const [priceVal, setPriceVal]         = useState(String(item.price));
+  const priceInputRef                   = useRef(null);
 
   const startPriceEdit = () => {
     setPriceVal(String(item.price));
@@ -46,16 +43,7 @@ function GroceryItem({ item, onRemove, onUpdate, onToggle, onEdit }) {
   };
 
   return (
-    <div className={`grocery-item${item.completed ? ' completed' : ''}${item.quantity === 0 ? ' qty-zero' : ''}`} role="listitem">
-      {/* ── Checkbox ── */}
-      <button
-        className={`checkbox${item.completed ? ' checked' : ''}`}
-        onClick={() => onToggle(item.id)}
-        title={item.completed ? 'סמן כלא נקנה' : 'סמן כנקנה'}
-        aria-label={item.completed ? 'סמן כלא נקנה' : 'סמן כנקנה'}
-      >
-        {item.completed && <span className="check-mark">✓</span>}
-      </button>
+    <div className={`grocery-item${item.quantity === 0 ? ' qty-zero' : ''}`} role="listitem">
 
       {/* ── Item details ── */}
       <div className="item-content">
@@ -116,7 +104,7 @@ function GroceryItem({ item, onRemove, onUpdate, onToggle, onEdit }) {
         <input
           className="qty-input"
           type="number"
-          min="1"
+          min="0"
           value={item.quantity}
           onChange={handleQtyChange}
           aria-label="כמות"

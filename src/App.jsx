@@ -26,7 +26,6 @@ function App() {
     }
   });
 
-  const [filter, setFilter]         = useState('all');
   const [search, setSearch]         = useState('');
   const [showModal, setShowModal]   = useState(false);
   const [editingItem, setEditingItem] = useState(null);
@@ -76,17 +75,9 @@ function App() {
   }, [dbStatus]);
 
   // ─── Derived values ───────────────────────────────────────────
-  const doneCount    = useMemo(() => items.filter((i) => i.completed).length, [items]);
-  const pendingCount = items.length - doneCount;
-
   const filteredItems = useMemo(() => items.filter((item) => {
-    const matchFilter =
-      filter === 'all' ||
-      (filter === 'pending' && !item.completed) ||
-      (filter === 'done'    &&  item.completed);
-    const matchSearch = search === '' || item.name.includes(search);
-    return matchFilter && matchSearch;
-  }), [items, filter, search]);
+    return search === '' || item.name.includes(search);
+  }), [items, search]);
 
   // סה"כ: פריטים עם כמות 0 לא נספרים
   const total = useMemo(
@@ -122,17 +113,6 @@ function App() {
   const removeItem = (id) => {
     setItems((prev) => prev.filter((item) => item.id !== id));
     dbDelete(id);
-  };
-
-  const toggleCompleted = (id) => {
-    setItems((prev) =>
-      prev.map((item) => {
-        if (item.id !== id) return item;
-        const updated = { ...item, completed: !item.completed };
-        dbUpsert(updated);
-        return updated;
-      })
-    );
   };
 
   // ─── Modal handlers ───────────────────────────────────────────
@@ -174,9 +154,8 @@ function App() {
       `🛒 רשימת קניות — ${dateStr}`,
       '',
       ...activeItems.map((i) => {
-        const check = i.completed ? '✅' : '🔲';
-        const qty   = `${i.quantity} ${i.unit || 'יח׳'}`;
-        return `${check} ${i.name} — ${qty}`;
+        const qty = `${i.quantity} ${i.unit || 'יח׳'}`;
+        return `🔲 ${i.name} — ${qty}`;
       }),
     ];
 
@@ -232,7 +211,7 @@ function App() {
             <div>
               <h1 className="header-h1">רשימת קניות חכמה</h1>
               <p className="header-sub">
-                {items.length} פריטים &middot; ✅ {doneCount} נקנו &middot; 📋 {pendingCount} נותרו
+                {items.length} פריטים
                 <span className="db-badge">{statusLabel}</span>
               </p>
             </div>
@@ -278,7 +257,7 @@ function App() {
           <span>המחירים משוערים בלבד לפי ממוצע סופרמרקטים בישראל. ייתכנו שינויים בין חנויות.</span>
         </div>
 
-        {/* ───── Filter bar ───── */}
+        {/* ───── Search bar ───── */}
         <div className="filter-bar no-print">
           <input
             className="search-input"
@@ -289,11 +268,6 @@ function App() {
             dir="rtl"
             aria-label="חיפוש פריט"
           />
-          <div className="filter-tabs" role="group" aria-label="סינון רשימה">
-            <button className={`filter-tab${filter === 'all'     ? ' active' : ''}`} onClick={() => setFilter('all')}>הכל ({items.length})</button>
-            <button className={`filter-tab${filter === 'pending' ? ' active' : ''}`} onClick={() => setFilter('pending')}>לא נקנה ({pendingCount})</button>
-            <button className={`filter-tab${filter === 'done'    ? ' active' : ''}`} onClick={() => setFilter('done')}>נקנה ({doneCount})</button>
-          </div>
         </div>
 
         {/* ───── Items list ───── */}
@@ -302,11 +276,7 @@ function App() {
             <div className="empty-state">
               <div className="empty-emoji">🛒</div>
               <p className="empty-text">
-                {search
-                  ? `לא נמצאו פריטים עבור "${search}"`
-                  : filter === 'done'
-                  ? 'אין פריטים שנקנו עדיין'
-                  : 'הרשימה ריקה — הוסף פריט!'}
+                {search ? `לא נמצאו פריטים עבור "${search}"` : 'הרשימה ריקה — הוסף פריט!'}
               </p>
               {items.length === 0 && (
                 <button className="btn btn-outline" onClick={handleReset}>
@@ -321,7 +291,6 @@ function App() {
                 item={item}
                 onRemove={removeItem}
                 onUpdate={updateItem}
-                onToggle={toggleCompleted}
                 onEdit={openEdit}
               />
             ))
