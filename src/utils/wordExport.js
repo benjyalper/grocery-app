@@ -54,7 +54,9 @@ export async function exportToWord(items) {
     day: 'numeric',
   });
 
-  const total = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  // פריטים עם כמות 0 לא נכללים במסמך
+  const activeItems = items.filter((item) => item.quantity > 0);
+  const total = activeItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
   // שורת כותרת
   const headerRow = new TableRow({
@@ -66,8 +68,8 @@ export async function exportToWord(items) {
     ],
   });
 
-  // שורות פריטים
-  const itemRows = items.map((item) => {
+  // שורות פריטים (רק פריטים עם כמות > 0)
+  const itemRows = activeItems.map((item) => {
     const subtotal = (item.price * item.quantity).toFixed(2);
     const status = item.completed ? ' ✓' : '';
     return new TableRow({

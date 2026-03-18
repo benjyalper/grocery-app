@@ -345,6 +345,20 @@ body {
   text-decoration: line-through;
   color: var(--gray-400);
 }
+/* כמות 0 — מעומעם, לא ייכלל ב-Word */
+.grocery-item.qty-zero {
+  opacity: 0.4;
+  border-style: dashed;
+  background: var(--gray-50);
+}
+.grocery-item.qty-zero .item-name {
+  color: var(--gray-400);
+}
+.grocery-item.qty-zero .item-subtotal::after {
+  content: ' (לא ייכלל)';
+  font-size: 0.7rem;
+  color: var(--gray-400);
+}
 
 /* Checkbox / Done button */
 .checkbox {

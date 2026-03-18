@@ -42,11 +42,11 @@ function GroceryItem({ item, onRemove, onUpdate, onToggle, onEdit }) {
   // ─── Quantity controls ───────────────────────────────────────
   const handleQtyChange = (e) => {
     const val = parseInt(e.target.value, 10);
-    if (!isNaN(val) && val >= 1) onUpdate(item.id, { quantity: val });
+    if (!isNaN(val) && val >= 0) onUpdate(item.id, { quantity: val });
   };
 
   return (
-    <div className={`grocery-item${item.completed ? ' completed' : ''}`} role="listitem">
+    <div className={`grocery-item${item.completed ? ' completed' : ''}${item.quantity === 0 ? ' qty-zero' : ''}`} role="listitem">
       {/* ── Checkbox ── */}
       <button
         className={`checkbox${item.completed ? ' checked' : ''}`}
@@ -112,7 +112,7 @@ function GroceryItem({ item, onRemove, onUpdate, onToggle, onEdit }) {
 
       {/* ── Quantity ── */}
       <div className="qty-controls no-print">
-        <button className="qty-btn" onClick={() => item.quantity > 1 && onUpdate(item.id, { quantity: item.quantity - 1 })} aria-label="הפחת כמות">−</button>
+        <button className="qty-btn" onClick={() => item.quantity > 0 && onUpdate(item.id, { quantity: item.quantity - 1 })} aria-label="הפחת כמות">−</button>
         <input
           className="qty-input"
           type="number"

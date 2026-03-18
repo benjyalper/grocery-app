@@ -87,6 +87,7 @@ function App() {
     return matchFilter && matchSearch;
   }), [items, filter, search]);
 
+  // סה"כ: פריטים עם כמות 0 לא נספרים
   const total = useMemo(
     () => items.reduce((sum, i) => sum + i.price * i.quantity, 0),
     [items]
@@ -138,6 +139,18 @@ function App() {
   const openEdit   = (item) => { setEditingItem(item); setShowModal(true); };
 
   const handleModalSave = (data) => {
+    // בדיקת כפילות שם (לא תלוי רישיות, ללא רווחים מיותרים)
+    const newName = data.name.trim().toLowerCase();
+    const duplicate = items.find((i) => {
+      if (editingItem && i.id === editingItem.id) return false; // לא לבדוק את הפריט עצמו בעריכה
+      return i.name.trim().toLowerCase() === newName;
+    });
+    if (duplicate) {
+      const proceed = window.confirm(
+        `⚠️ הפריט "${duplicate.name}" כבר קיים ברשימה.\nהאם להוסיף אותו בכל זאת?`
+      );
+      if (!proceed) return;
+    }
     if (editingItem) updateItem(editingItem.id, data);
     else addItem(data);
     setShowModal(false);
