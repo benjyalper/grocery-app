@@ -2,12 +2,13 @@
  * server.js — Express backend for grocery-app
  *
  * In production (Railway):
- *   - Connects to Railway PostgreSQL via DATABASE_URL
+ *   - Connects to Railway PostgreSQL via DATABASE_URL env var
  *   - Serves the Vite build from /dist
  *   - Exposes /api/items REST endpoints
  *
- * In development:
- *   - Run alongside Vite dev server (Vite proxies /api here)
+ * If DATABASE_URL is not set the server still starts and serves
+ * the frontend; API calls return 503 and the frontend falls back
+ * to localStorage automatically.
  */
 
 import express from 'express';
@@ -19,18 +20,26 @@ const { Pool } = pg;
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const app  = express();
-const PORT = process.env.PORT || 3007; // 3007 in dev; Railway overrides with PORT
+const PORT = process.env.PORT || 3007;
 
-// ─── Database ────────────────────────────────────────────────
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production'
-    ? { rejectUnauthorized: false }
-    : false,
-});
+// ─── Database (optional) ──────────────────────────────────────
+let pool = null;
+let dbReady = false;
 
-// Create table if it doesn't exist (auto-migration on startup)
+if (process.env.DATABASE_URL) {
+  pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: process.env.NODE_ENV === 'production'
+      ? { rejectUnauthorized: false }
+      : false,
+  });
+} else {
+  console.warn('⚠️  DATABASE_URL not set — running without database (localStorage only)');
+}
+
+// Auto-create table on startup
 async function initDb() {
+  if (!pool) return;
   await pool.query(`
     CREATE TABLE IF NOT EXISTS grocery_items (
       id          TEXT PRIMARY KEY,
@@ -42,7 +51,16 @@ async function initDb() {
       created_at  TIMESTAMPTZ          DEFAULT now()
     );
   `);
+  dbReady = true;
   console.log('✅ DB ready');
+}
+
+// Middleware that rejects API calls when DB is unavailable
+function requireDb(req, res, next) {
+  if (!dbReady) {
+    return res.status(503).json({ error: 'Database not available' });
+  }
+  next();
 }
 
 // ─── Middleware ───────────────────────────────────────────────
@@ -55,8 +73,8 @@ if (process.env.NODE_ENV === 'production') {
 
 // ─── API Routes ───────────────────────────────────────────────
 
-// GET /api/items — return all items ordered by creation time
-app.get('/api/items', async (req, res) => {
+// GET /api/items
+app.get('/api/items', requireDb, async (req, res) => {
   try {
     const { rows } = await pool.query(
       'SELECT * FROM grocery_items ORDER BY created_at ASC'
@@ -68,8 +86,8 @@ app.get('/api/items', async (req, res) => {
   }
 });
 
-// POST /api/items — insert or update a single item (upsert)
-app.post('/api/items', async (req, res) => {
+// POST /api/items — upsert one item
+app.post('/api/items', requireDb, async (req, res) => {
   const { id, name, quantity, price, unit, completed } = req.body;
   try {
     const { rows } = await pool.query(
@@ -91,9 +109,9 @@ app.post('/api/items', async (req, res) => {
   }
 });
 
-// POST /api/items/seed — replace all items (used on reset)
-app.post('/api/items/seed', async (req, res) => {
-  const items = req.body; // array of items
+// POST /api/items/seed — replace entire list
+app.post('/api/items/seed', requireDb, async (req, res) => {
+  const items = req.body;
   try {
     await pool.query('DELETE FROM grocery_items');
     for (const item of items) {
@@ -111,7 +129,7 @@ app.post('/api/items/seed', async (req, res) => {
 });
 
 // DELETE /api/items/:id — remove one item
-app.delete('/api/items/:id', async (req, res) => {
+app.delete('/api/items/:id', requireDb, async (req, res) => {
   try {
     await pool.query('DELETE FROM grocery_items WHERE id = $1', [req.params.id]);
     res.json({ ok: true });
@@ -121,8 +139,8 @@ app.delete('/api/items/:id', async (req, res) => {
   }
 });
 
-// DELETE /api/items — clear all items
-app.delete('/api/items', async (req, res) => {
+// DELETE /api/items — clear all
+app.delete('/api/items', requireDb, async (req, res) => {
   try {
     await pool.query('DELETE FROM grocery_items');
     res.json({ ok: true });
@@ -132,21 +150,24 @@ app.delete('/api/items', async (req, res) => {
   }
 });
 
-// SPA fallback — send index.html for all non-API routes in production
+// SPA fallback — must be last
 if (process.env.NODE_ENV === 'production') {
   app.get('*', (req, res) => {
     res.sendFile(join(__dirname, 'dist', 'index.html'));
   });
 }
 
-// ─── Start ────────────────────────────────────────────────────
-initDb()
-  .then(() => {
-    app.listen(PORT, '0.0.0.0', () =>
-      console.log(`🚀 Server listening on port ${PORT}`)
-    );
-  })
-  .catch((err) => {
-    console.error('❌ Failed to init DB:', err.message);
-    process.exit(1);
-  });
+// ─── Start (always, even without DB) ─────────────────────────
+async function start() {
+  try {
+    await initDb();
+  } catch (err) {
+    console.error('⚠️  DB init failed:', err.message, '— continuing without DB');
+  }
+
+  app.listen(PORT, '0.0.0.0', () =>
+    console.log(`🚀 Server listening on port ${PORT} | DB: ${dbReady ? 'connected' : 'offline'}`)
+  );
+}
+
+start();
