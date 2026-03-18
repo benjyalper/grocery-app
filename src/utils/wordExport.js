@@ -1,0 +1,174 @@
+/**
+ * ייצוא רשימת קניות לקובץ Word (.docx) בעברית RTL
+ * משתמש בספריית docx v8
+ */
+
+import {
+  Document,
+  Packer,
+  Paragraph,
+  TextRun,
+  Table,
+  TableRow,
+  TableCell,
+  AlignmentType,
+  WidthType,
+  HeadingLevel,
+} from 'docx';
+import { saveAs } from 'file-saver';
+
+/**
+ * יוצר תא טבלה עם טקסט בעברית RTL
+ */
+function makeCell(text, { bold = false, width } = {}) {
+  const cellOptions = {
+    children: [
+      new Paragraph({
+        children: [
+          new TextRun({
+            text,
+            bold,
+            rightToLeft: true,
+            font: 'David',
+          }),
+        ],
+        alignment: AlignmentType.RIGHT,
+        bidirectional: true,
+      }),
+    ],
+  };
+  if (width) {
+    cellOptions.width = { size: width, type: WidthType.DXA };
+  }
+  return new TableCell(cellOptions);
+}
+
+/**
+ * מייצא את רשימת הקניות לקובץ Word
+ * @param {Array} items - מערך הפריטים
+ */
+export async function exportToWord(items) {
+  const dateStr = new Date().toLocaleDateString('he-IL', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+
+  const total = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+
+  // שורת כותרת
+  const headerRow = new TableRow({
+    children: [
+      makeCell('שם פריט', { bold: true }),
+      makeCell('כמות', { bold: true }),
+      makeCell('מחיר ליחידה', { bold: true }),
+      makeCell('סה״כ לפריט', { bold: true }),
+    ],
+  });
+
+  // שורות פריטים
+  const itemRows = items.map((item) => {
+    const subtotal = (item.price * item.quantity).toFixed(2);
+    const status = item.completed ? ' ✓' : '';
+    return new TableRow({
+      children: [
+        makeCell(item.name + status),
+        makeCell(String(item.quantity)),
+        makeCell(`\u20AA${item.price.toFixed(2)}`),
+        makeCell(`\u20AA${subtotal}`),
+      ],
+    });
+  });
+
+  // שורת סה"כ
+  const totalRow = new TableRow({
+    children: [
+      new TableCell({
+        columnSpan: 3,
+        children: [
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: 'סה״כ כללי משוער',
+                bold: true,
+                rightToLeft: true,
+                font: 'David',
+              }),
+            ],
+            alignment: AlignmentType.RIGHT,
+            bidirectional: true,
+          }),
+        ],
+      }),
+      makeCell(`\u20AA${total.toFixed(2)}`, { bold: true }),
+    ],
+  });
+
+  const table = new Table({
+    rows: [headerRow, ...itemRows, totalRow],
+    width: { size: 100, type: WidthType.PERCENTAGE },
+  });
+
+  const doc = new Document({
+    sections: [
+      {
+        children: [
+          // כותרת ראשית
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: 'רשימת קניות',
+                bold: true,
+                size: 40,
+                rightToLeft: true,
+                font: 'David',
+              }),
+            ],
+            alignment: AlignmentType.RIGHT,
+            bidirectional: true,
+            spacing: { after: 200 },
+          }),
+
+          // תאריך
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: `תאריך: ${dateStr}`,
+                size: 22,
+                color: '6b7280',
+                rightToLeft: true,
+                font: 'David',
+              }),
+            ],
+            alignment: AlignmentType.RIGHT,
+            bidirectional: true,
+            spacing: { after: 400 },
+          }),
+
+          // טבלת פריטים
+          table,
+
+          // הערת מחירים
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: '* המחירים המוצגים הם הערכות בלבד על פי מחירים ממוצעים בסופרמרקטים בישראל',
+                size: 18,
+                italics: true,
+                color: '9ca3af',
+                rightToLeft: true,
+                font: 'David',
+              }),
+            ],
+            alignment: AlignmentType.RIGHT,
+            bidirectional: true,
+            spacing: { before: 300 },
+          }),
+        ],
+      },
+    ],
+  });
+
+  const blob = await Packer.toBlob(doc);
+  saveAs(blob, 'רשימת-קניות.docx');
+}
