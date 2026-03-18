@@ -1,20 +1,19 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { DEFAULT_ITEMS } from './data/items';
 import GroceryItem from './components/GroceryItem';
 import ItemModal from './components/ItemModal';
 import { exportToWord } from './utils/wordExport';
+import { apiGetItems, apiUpsertItem, apiDeleteItem, apiSeedItems } from './api';
 
-const STORAGE_KEY = 'grocery-items-v2'; // bumped: added unit field
+const STORAGE_KEY = 'grocery-items-v2'; // localStorage cache (fast load)
 
-/**
- * יוצר מזהה ייחודי לפריט חדש
- */
 function genId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2);
 }
 
 /**
  * האפליקציה הראשית — רשימת קניות חכמה
+ * שומרת ב-PostgreSQL (דרך Express API) + localStorage כ-cache
  */
 function App() {
   // ─── State ───────────────────────────────────────────────────
@@ -27,114 +26,151 @@ function App() {
     }
   });
 
-  const [filter, setFilter] = useState('all'); // 'all' | 'pending' | 'done'
-  const [search, setSearch] = useState('');
-  const [showModal, setShowModal] = useState(false);
+  const [filter, setFilter]         = useState('all');
+  const [search, setSearch]         = useState('');
+  const [showModal, setShowModal]   = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [wordLoading, setWordLoading] = useState(false);
+  // 'idle' | 'loading' | 'ok' | 'offline'
+  const [dbStatus, setDbStatus]     = useState('idle');
 
-  // ─── Persistence ─────────────────────────────────────────────
+  // Track which IDs have pending sync so we don't race
+  const pendingRef = useRef(new Set());
+
+  // ─── Load from DB on mount ───────────────────────────────────
+  useEffect(() => {
+    setDbStatus('loading');
+    apiGetItems()
+      .then((rows) => {
+        if (rows.length > 0) {
+          setItems(rows);
+        } else {
+          // DB is empty — seed with defaults
+          const fresh = DEFAULT_ITEMS.map((i) => ({ ...i }));
+          setItems(fresh);
+          apiSeedItems(fresh).catch(console.error);
+        }
+        setDbStatus('ok');
+      })
+      .catch((err) => {
+        console.warn('DB unavailable, using localStorage:', err.message);
+        setDbStatus('offline');
+      });
+  }, []);
+
+  // ─── Persist to localStorage (fast cache) ────────────────────
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
   }, [items]);
 
+  // ─── DB helpers ───────────────────────────────────────────────
+  const dbUpsert = useCallback((item) => {
+    if (dbStatus === 'offline') return;
+    apiUpsertItem(item).catch(console.error);
+  }, [dbStatus]);
+
+  const dbDelete = useCallback((id) => {
+    if (dbStatus === 'offline') return;
+    apiDeleteItem(id).catch(console.error);
+  }, [dbStatus]);
+
   // ─── Derived values ───────────────────────────────────────────
-  const doneCount = useMemo(() => items.filter((i) => i.completed).length, [items]);
+  const doneCount    = useMemo(() => items.filter((i) => i.completed).length, [items]);
   const pendingCount = items.length - doneCount;
 
-  const filteredItems = useMemo(() => {
-    return items.filter((item) => {
-      const matchFilter =
-        filter === 'all' ||
-        (filter === 'pending' && !item.completed) ||
-        (filter === 'done' && item.completed);
-      const matchSearch =
-        search === '' || item.name.includes(search);
-      return matchFilter && matchSearch;
-    });
-  }, [items, filter, search]);
+  const filteredItems = useMemo(() => items.filter((item) => {
+    const matchFilter =
+      filter === 'all' ||
+      (filter === 'pending' && !item.completed) ||
+      (filter === 'done'    &&  item.completed);
+    const matchSearch = search === '' || item.name.includes(search);
+    return matchFilter && matchSearch;
+  }), [items, filter, search]);
 
   const total = useMemo(
-    () => items.reduce((sum, item) => sum + item.price * item.quantity, 0),
+    () => items.reduce((sum, i) => sum + i.price * i.quantity, 0),
     [items]
   );
 
   // ─── CRUD ─────────────────────────────────────────────────────
   const addItem = (data) => {
-    setItems((prev) => [
-      ...prev,
-      { id: genId(), name: data.name, quantity: data.quantity, price: data.price, completed: false },
-    ]);
+    const newItem = {
+      id: genId(),
+      name: data.name,
+      quantity: data.quantity,
+      price: data.price,
+      unit: data.unit || 'יח׳',
+      completed: false,
+    };
+    setItems((prev) => [...prev, newItem]);
+    dbUpsert(newItem);
   };
 
   const updateItem = (id, updates) => {
     setItems((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, ...updates } : item))
+      prev.map((item) => {
+        if (item.id !== id) return item;
+        const updated = { ...item, ...updates };
+        dbUpsert(updated);
+        return updated;
+      })
     );
   };
 
   const removeItem = (id) => {
     setItems((prev) => prev.filter((item) => item.id !== id));
+    dbDelete(id);
   };
 
   const toggleCompleted = (id) => {
     setItems((prev) =>
-      prev.map((item) =>
-        item.id === id ? { ...item, completed: !item.completed } : item
-      )
+      prev.map((item) => {
+        if (item.id !== id) return item;
+        const updated = { ...item, completed: !item.completed };
+        dbUpsert(updated);
+        return updated;
+      })
     );
   };
 
   // ─── Modal handlers ───────────────────────────────────────────
-  const openAdd = () => {
-    setEditingItem(null);
-    setShowModal(true);
-  };
-
-  const openEdit = (item) => {
-    setEditingItem(item);
-    setShowModal(true);
-  };
+  const openAdd    = () => { setEditingItem(null); setShowModal(true); };
+  const openEdit   = (item) => { setEditingItem(item); setShowModal(true); };
 
   const handleModalSave = (data) => {
-    if (editingItem) {
-      updateItem(editingItem.id, data);
-    } else {
-      addItem(data);
-    }
+    if (editingItem) updateItem(editingItem.id, data);
+    else addItem(data);
     setShowModal(false);
     setEditingItem(null);
   };
 
-  const handleModalClose = () => {
-    setShowModal(false);
-    setEditingItem(null);
-  };
+  const handleModalClose = () => { setShowModal(false); setEditingItem(null); };
 
-  // ─── Print ────────────────────────────────────────────────────
-  const handlePrint = () => {
-    window.print();
-  };
+  // ─── Print & Word ─────────────────────────────────────────────
+  const handlePrint = () => window.print();
 
-  // ─── Word export ─────────────────────────────────────────────
   const handleWordExport = async () => {
     setWordLoading(true);
-    try {
-      await exportToWord(items);
-    } catch (err) {
-      console.error(err);
-      alert('שגיאה ביצירת קובץ Word:\n' + err.message);
-    } finally {
-      setWordLoading(false);
-    }
+    try   { await exportToWord(items); }
+    catch (err) { console.error(err); alert('שגיאה ביצירת קובץ Word:\n' + err.message); }
+    finally { setWordLoading(false); }
   };
 
   // ─── Reset ────────────────────────────────────────────────────
-  const handleReset = () => {
-    if (window.confirm('האם לאפס את הרשימה לרשימה המקורית? פעולה זו תמחק שינויים.')) {
-      setItems(DEFAULT_ITEMS.map((i) => ({ ...i })));
-    }
+  const handleReset = async () => {
+    if (!window.confirm('האם לאפס את הרשימה לרשימה המקורית? פעולה זו תמחק שינויים.')) return;
+    const fresh = DEFAULT_ITEMS.map((i) => ({ ...i }));
+    setItems(fresh);
+    apiSeedItems(fresh).catch(console.error);
   };
+
+  // ─── Status label ─────────────────────────────────────────────
+  const statusLabel = {
+    idle:    '',
+    loading: ' · ⏳ מתחבר...',
+    ok:      ' · 🟢 מחובר',
+    offline: ' · 🔴 לא מחובר',
+  }[dbStatus];
 
   // ─── Render ───────────────────────────────────────────────────
   return (
@@ -148,13 +184,13 @@ function App() {
               <h1 className="header-h1">רשימת קניות חכמה</h1>
               <p className="header-sub">
                 {items.length} פריטים &middot; ✅ {doneCount} נקנו &middot; 📋 {pendingCount} נותרו
+                <span className="db-badge">{statusLabel}</span>
               </p>
             </div>
           </div>
           <div className="header-actions">
             <button className="btn btn-ghost" onClick={handlePrint} title="הדפס רשימה">
-              <span>🖨️</span>
-              <span className="btn-label">הדפס</span>
+              <span>🖨️</span><span className="btn-label">הדפס</span>
             </button>
             <button
               className="btn btn-ghost"
@@ -162,12 +198,10 @@ function App() {
               disabled={wordLoading}
               title="הורד מסמך Word"
             >
-              <span>📄</span>
-              <span className="btn-label">{wordLoading ? '...' : 'Word'}</span>
+              <span>📄</span><span className="btn-label">{wordLoading ? '...' : 'Word'}</span>
             </button>
             <button className="btn btn-white" onClick={openAdd}>
-              <span>+</span>
-              <span className="btn-label">הוסף פריט</span>
+              <span>+</span><span className="btn-label">הוסף פריט</span>
             </button>
           </div>
         </div>
@@ -182,12 +216,10 @@ function App() {
       </div>
 
       <main className="main">
-        {/* הערת מחירים */}
+        {/* Banner */}
         <div className="price-banner no-print">
           <span>ℹ️</span>
-          <span>
-            המחירים משוערים בלבד לפי ממוצע סופרמרקטים בישראל. ייתכנו שינויים בין חנויות.
-          </span>
+          <span>המחירים משוערים בלבד לפי ממוצע סופרמרקטים בישראל. ייתכנו שינויים בין חנויות.</span>
         </div>
 
         {/* ───── Filter bar ───── */}
@@ -202,24 +234,9 @@ function App() {
             aria-label="חיפוש פריט"
           />
           <div className="filter-tabs" role="group" aria-label="סינון רשימה">
-            <button
-              className={`filter-tab${filter === 'all' ? ' active' : ''}`}
-              onClick={() => setFilter('all')}
-            >
-              הכל ({items.length})
-            </button>
-            <button
-              className={`filter-tab${filter === 'pending' ? ' active' : ''}`}
-              onClick={() => setFilter('pending')}
-            >
-              לא נקנה ({pendingCount})
-            </button>
-            <button
-              className={`filter-tab${filter === 'done' ? ' active' : ''}`}
-              onClick={() => setFilter('done')}
-            >
-              נקנה ({doneCount})
-            </button>
+            <button className={`filter-tab${filter === 'all'     ? ' active' : ''}`} onClick={() => setFilter('all')}>הכל ({items.length})</button>
+            <button className={`filter-tab${filter === 'pending' ? ' active' : ''}`} onClick={() => setFilter('pending')}>לא נקנה ({pendingCount})</button>
+            <button className={`filter-tab${filter === 'done'    ? ' active' : ''}`} onClick={() => setFilter('done')}>נקנה ({doneCount})</button>
           </div>
         </div>
 
