@@ -41,7 +41,7 @@ if (process.env.DATABASE_URL) {
 async function initDb() {
   if (!pool) return;
 
-  // Users table
+  // 1. Users table (new)
   await pool.query(`
     CREATE TABLE IF NOT EXISTS users (
       id          TEXT PRIMARY KEY,
@@ -51,20 +51,32 @@ async function initDb() {
     );
   `);
 
-  // Items table — now with user_id
+  // 2. Items table — create fresh if it doesn't exist
   await pool.query(`
     CREATE TABLE IF NOT EXISTS grocery_items (
-      id          TEXT    NOT NULL,
-      user_id     TEXT    NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      name        TEXT    NOT NULL,
-      quantity    INTEGER NOT NULL DEFAULT 1,
-      price       NUMERIC NOT NULL DEFAULT 0,
-      unit        TEXT    NOT NULL DEFAULT 'יח׳',
-      completed   BOOLEAN NOT NULL DEFAULT false,
-      created_at  TIMESTAMPTZ      DEFAULT now(),
+      id          TEXT        NOT NULL,
+      user_id     TEXT        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      name        TEXT        NOT NULL,
+      quantity    INTEGER     NOT NULL DEFAULT 1,
+      price       NUMERIC     NOT NULL DEFAULT 0,
+      unit        TEXT        NOT NULL DEFAULT 'יח׳',
+      completed   BOOLEAN     NOT NULL DEFAULT false,
+      created_at  TIMESTAMPTZ          DEFAULT now(),
       PRIMARY KEY (id, user_id)
     );
   `);
+
+  // 3. Migrate existing table: add user_id column if missing (old schema had no user_id)
+  await pool.query(`
+    ALTER TABLE grocery_items
+      ADD COLUMN IF NOT EXISTS user_id TEXT;
+  `).catch(() => {}); // ignore if column already exists with NOT NULL
+
+  // 4. Add unit column if missing (older installs)
+  await pool.query(`
+    ALTER TABLE grocery_items
+      ADD COLUMN IF NOT EXISTS unit TEXT NOT NULL DEFAULT 'יח׳';
+  `).catch(() => {});
 
   dbReady = true;
   console.log('✅ DB ready');
