@@ -58,8 +58,20 @@ export async function apiLogin(username, password) {
   return data;
 }
 
+// ─── Normalise DB row: PostgreSQL returns NUMERIC as string ──
+function normaliseItem(item) {
+  return {
+    ...item,
+    price:    parseFloat(item.price)    || 0,
+    quantity: parseInt(item.quantity,10) || 0,
+  };
+}
+
 // ─── Items endpoints (all require auth) ───────────────────────
-export async function apiGetItems()       { return req('GET',    '/items'); }
+export async function apiGetItems() {
+  const rows = await req('GET', '/items');
+  return rows.map(normaliseItem);
+}
 export async function apiUpsertItem(item) { return req('POST',   '/items', item); }
 export async function apiDeleteItem(id)   { return req('DELETE', `/items/${id}`); }
 export async function apiSeedItems(items) { return req('POST',   '/items/seed', items); }
