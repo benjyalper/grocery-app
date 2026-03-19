@@ -6,6 +6,7 @@ import AuthPage     from './components/AuthPage';
 import ImportModal  from './components/ImportModal';
 import { exportToWord } from './utils/wordExport';
 import { useLanguage }  from './LanguageContext';
+import { useInactivityTimeout } from './hooks/useInactivityTimeout';
 import {
   apiGetItems, apiUpsertItem, apiDeleteItem, apiSeedItems,
   getToken, getUsername, clearAuth,
@@ -20,8 +21,8 @@ function genId() {
 function App() {
   const { t, lang, toggle: toggleLang, isRTL } = useLanguage();
 
-  // ─── Auth state ──────────────────────────────────────────────
-  const [username, setUsername] = useState(() => getUsername());
+  // ─── Auth state — always null on page load (token is memory-only) ──
+  const [username, setUsername] = useState(null);
 
   // ─── Items state ─────────────────────────────────────────────
   const [items, setItems] = useState(() => {
@@ -216,6 +217,10 @@ function App() {
     localStorage.removeItem(STORAGE_KEY);
   };
 
+  // ─── Inactivity timeout (10 min) ──────────────────────────────
+  const isLoggedIn = !!username && !!getToken();
+  const { showWarning, dismissWarning } = useInactivityTimeout(handleLogout, isLoggedIn);
+
   // ─── Status label ─────────────────────────────────────────────
   const statusLabel = {
     idle:    '',
@@ -374,6 +379,23 @@ function App() {
           onImport={handleImport}
           onClose={() => setShowImport(false)}
         />
+      )}
+
+      {/* ───── Inactivity warning ───── */}
+      {showWarning && (
+        <div className="inactivity-overlay">
+          <div className="inactivity-box">
+            <div className="inactivity-icon">⏱️</div>
+            <p className="inactivity-msg">
+              {lang === 'en'
+                ? 'You will be signed out in 1 minute due to inactivity.'
+                : 'תנותק בעוד דקה אחת עקב חוסר פעילות.'}
+            </p>
+            <button className="btn btn-primary inactivity-btn" onClick={dismissWarning}>
+              {lang === 'en' ? 'Keep me signed in' : 'השאר אותי מחובר'}
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

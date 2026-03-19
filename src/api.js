@@ -1,41 +1,40 @@
 /**
  * api.js — frontend client for the Express/PostgreSQL backend
  *
- * Sends JWT in Authorization header for all authenticated requests.
- * Falls back gracefully if the API is unavailable.
+ * Auth token is kept in MEMORY ONLY (not localStorage).
+ * This means every new page load / link open requires a fresh sign-in.
  */
 
 const BASE = '/api';
 
-// ─── Token helpers ────────────────────────────────────────────
-const TOKEN_KEY    = 'grocery-auth-token';
-const USERNAME_KEY = 'grocery-auth-username';
+// ─── In-memory auth store (cleared on every page load) ────────
+let _token    = null;
+let _username = null;
 
-export function getToken()    { return localStorage.getItem(TOKEN_KEY); }
-export function getUsername() { return localStorage.getItem(USERNAME_KEY); }
+export function getToken()    { return _token; }
+export function getUsername() { return _username; }
 
 export function saveAuth(token, username) {
-  localStorage.setItem(TOKEN_KEY,    token);
-  localStorage.setItem(USERNAME_KEY, username);
+  _token    = token;
+  _username = username;
 }
 
 export function clearAuth() {
-  localStorage.removeItem(TOKEN_KEY);
-  localStorage.removeItem(USERNAME_KEY);
+  _token    = null;
+  _username = null;
 }
 
 // ─── Core fetch helper ────────────────────────────────────────
 async function req(method, path, body, auth = true) {
   const headers = { 'Content-Type': 'application/json' };
-  if (auth) {
-    const token = getToken();
-    if (token) headers['Authorization'] = `Bearer ${token}`;
-  }
+  if (auth && _token) headers['Authorization'] = `Bearer ${_token}`;
+
   const res = await fetch(BASE + path, {
     method,
     headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
+
   if (!res.ok) {
     const text = await res.text();
     let msg = text;
@@ -58,20 +57,17 @@ export async function apiLogin(username, password) {
   return data;
 }
 
-// ─── Normalise DB row: PostgreSQL returns NUMERIC as string ──
+// ─── Normalise DB row: PostgreSQL returns NUMERIC as string ───
 function normaliseItem(item) {
   return {
     ...item,
-    price:    parseFloat(item.price)    || 0,
-    quantity: parseInt(item.quantity,10) || 0,
+    price:    parseFloat(item.price)     || 0,
+    quantity: parseInt(item.quantity, 10) || 0,
   };
 }
 
 // ─── Items endpoints (all require auth) ───────────────────────
-export async function apiGetItems() {
-  const rows = await req('GET', '/items');
-  return rows.map(normaliseItem);
-}
-export async function apiUpsertItem(item) { return req('POST',   '/items', item); }
-export async function apiDeleteItem(id)   { return req('DELETE', `/items/${id}`); }
-export async function apiSeedItems(items) { return req('POST',   '/items/seed', items); }
+export async function apiGetItems()           { return (await req('GET', '/items')).map(normaliseItem); }
+export async function apiUpsertItem(item)     { return req('POST',   '/items',        item); }
+export async function apiDeleteItem(id)       { return req('DELETE', `/items/${id}`); }
+export async function apiSeedItems(items)     { return req('POST',   '/items/seed',   items); }
