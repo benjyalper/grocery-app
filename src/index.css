@@ -1233,6 +1233,39 @@ body {
   color: var(--gray-400);
 }
 
+/* ── Language toggle button ── */
+.btn-lang {
+  background: rgba(255,255,255,0.15);
+  color: white;
+  border: 1.5px solid rgba(255,255,255,0.4);
+  font-weight: 700;
+  font-size: 0.8rem;
+  letter-spacing: 0.5px;
+  padding: 0.4rem 0.6rem;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btn-lang:hover { background: rgba(255,255,255,0.28); }
+
+/* Auth page lang toggle */
+.auth-card { position: relative; }
+.auth-lang-toggle {
+  position: absolute;
+  top: 0.75rem;
+  left: 0.75rem;
+  background: var(--green-100);
+  color: var(--green-700);
+  border: 1.5px solid var(--green-200);
+  border-radius: var(--radius);
+  padding: 0.3rem 0.6rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.auth-lang-toggle:hover { background: var(--green-200); }
+
 /* ── Logout button ── */
 .btn-logout {
   display: inline-flex;
@@ -1338,4 +1371,78 @@ body {
   margin-top: 0.75rem;
   color: #dc2626;
   font-size: 0.875rem;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   LTR OVERRIDES — English mode ([dir="ltr"])
+   The browser handles most text direction automatically.
+   These rules fix layout elements that use explicit RTL values.
+══════════════════════════════════════════════════════════════ */
+[dir="ltr"] body,
+[dir="ltr"] .app {
+  direction: ltr;
+  text-align: left;
+}
+
+/* Header: title on left, buttons on right */
+[dir="ltr"] .header-content {
+  flex-direction: row;
+}
+[dir="ltr"] .header-title {
+  flex-direction: row;
+}
+
+/* Filter bar */
+[dir="ltr"] .filter-bar {
+  flex-direction: row-reverse;
+}
+
+/* Item card */
+[dir="ltr"] .grocery-item {
+  flex-direction: row-reverse;
+}
+[dir="ltr"] .item-content {
+  text-align: left;
+}
+[dir="ltr"] .item-meta {
+  justify-content: flex-start;
+}
+
+/* Total bar */
+[dir="ltr"] .total-bar-inner {
+  flex-direction: row-reverse;
+}
+
+/* Modal */
+[dir="ltr"] .modal {
+  text-align: left;
+}
+[dir="ltr"] .modal-header {
+  flex-direction: row-reverse;
+}
+[dir="ltr"] .unit-selector {
+  flex-direction: row-reverse;
+}
+
+/* Auth */
+[dir="ltr"] .auth-card {
+  text-align: left;
+}
+[dir="ltr"] .auth-lang-toggle {
+  left: auto;
+  right: 0.75rem;
+}
+
+/* Mobile: keep 4-column button grid in LTR too */
+@media (max-width: 480px) {
+  [dir="ltr"] .header-content {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  [dir="ltr"] .header-title {
+    justify-content: flex-start;
+  }
+  [dir="ltr"] .header-actions {
+    direction: ltr;
+  }
 }

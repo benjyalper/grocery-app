@@ -5,6 +5,7 @@ import ItemModal    from './components/ItemModal';
 import AuthPage     from './components/AuthPage';
 import ImportModal  from './components/ImportModal';
 import { exportToWord } from './utils/wordExport';
+import { useLanguage }  from './LanguageContext';
 import {
   apiGetItems, apiUpsertItem, apiDeleteItem, apiSeedItems,
   getToken, getUsername, clearAuth,
@@ -17,8 +18,9 @@ function genId() {
 }
 
 function App() {
+  const { t, lang, toggle: toggleLang, isRTL } = useLanguage();
+
   // ─── Auth state ──────────────────────────────────────────────
-  // username is null when logged out, string when logged in
   const [username, setUsername] = useState(() => getUsername());
 
   // ─── Items state ─────────────────────────────────────────────
@@ -34,14 +36,12 @@ function App() {
   const [editingItem, setEditingItem] = useState(null);
   const [showImport, setShowImport]   = useState(false);
   const [wordLoading, setWordLoading] = useState(false);
-  const [copyLabel, setCopyLabel]     = useState('העתק');
+  const [copyLabel, setCopyLabel]     = useState(null); // null = default label
   const [dbStatus, setDbStatus]       = useState('idle');
 
-  // ─── Load from DB whenever user logs in ──────────────────────
+  // ─── Load from DB on login ────────────────────────────────────
   useEffect(() => {
-    if (!username) return; // not logged in
-    if (!getToken()) return;
-
+    if (!username || !getToken()) return;
     setDbStatus('loading');
     apiGetItems()
       .then((rows) => {
@@ -117,15 +117,11 @@ function App() {
     dbDelete(id);
   };
 
-  // ─── Import from text ─────────────────────────────────────────
+  // ─── Import ───────────────────────────────────────────────────
   const handleImport = (parsedItems) => {
     const newItems = parsedItems.map((p) => ({
-      id: genId(),
-      name: p.name,
-      quantity: p.quantity,
-      price: p.price,
-      unit: p.unit || 'יח׳',
-      completed: false,
+      id: genId(), name: p.name, quantity: p.quantity,
+      price: p.price, unit: p.unit || 'יח׳', completed: false,
     }));
     setItems((prev) => {
       const merged = [...prev];
@@ -133,10 +129,7 @@ function App() {
         const exists = merged.find(
           (ex) => ex.name.trim().toLowerCase() === ni.name.trim().toLowerCase()
         );
-        if (!exists) {
-          merged.push(ni);
-          dbUpsert(ni);
-        }
+        if (!exists) { merged.push(ni); dbUpsert(ni); }
       });
       return merged;
     });
@@ -153,9 +146,7 @@ function App() {
       return i.name.trim().toLowerCase() === newName;
     });
     if (duplicate) {
-      const proceed = window.confirm(
-        `⚠️ הפריט "${duplicate.name}" כבר קיים ברשימה.\nהאם להוסיף אותו בכל זאת?`
-      );
+      const proceed = window.confirm(t('duplicateWarning', { name: duplicate.name }));
       if (!proceed) return;
     }
     if (editingItem) updateItem(editingItem.id, data);
@@ -171,12 +162,15 @@ function App() {
 
   const handleCopy = async () => {
     const activeItems = items.filter((i) => i.quantity > 0);
-    const dateStr = new Date().toLocaleDateString('he-IL', {
+    const locale = lang === 'en' ? 'en-US' : 'he-IL';
+    const dateStr = new Date().toLocaleDateString(locale, {
       year: 'numeric', month: 'long', day: 'numeric',
     });
+    const header = lang === 'en'
+      ? `🛒 Grocery List — ${dateStr}`
+      : `🛒 רשימת קניות — ${dateStr}`;
     const lines = [
-      `🛒 רשימת קניות — ${dateStr}`,
-      '',
+      header, '',
       ...activeItems.map((i) => `🔲 ${i.name} — ${i.quantity} ${i.unit || 'יח׳'}`),
     ];
     try {
@@ -190,20 +184,20 @@ function App() {
       document.execCommand('copy');
       document.body.removeChild(ta);
     }
-    setCopyLabel('✓ הועתק!');
-    setTimeout(() => setCopyLabel('העתק'), 2200);
+    setCopyLabel(t('btnCopied'));
+    setTimeout(() => setCopyLabel(null), 2200);
   };
 
   const handleWordExport = async () => {
     setWordLoading(true);
-    try { await exportToWord(items); }
-    catch (err) { alert('שגיאה ביצירת קובץ Word:\n' + err.message); }
+    try { await exportToWord(items, t); }
+    catch (err) { alert('Error creating Word file:\n' + err.message); }
     finally { setWordLoading(false); }
   };
 
   // ─── Reset ────────────────────────────────────────────────────
   const handleReset = async () => {
-    if (!window.confirm('האם לאפס את הרשימה לרשימה המקורית?')) return;
+    if (!window.confirm(t('resetConfirm'))) return;
     const fresh = DEFAULT_ITEMS.map((i) => ({ ...i }));
     setItems(fresh);
     apiSeedItems(fresh).catch(console.error);
@@ -212,7 +206,7 @@ function App() {
   // ─── Auth ─────────────────────────────────────────────────────
   const handleAuth = (uname) => {
     setUsername(uname);
-    setItems(DEFAULT_ITEMS.map((i) => ({ ...i }))); // clear stale cache
+    setItems(DEFAULT_ITEMS.map((i) => ({ ...i })));
   };
 
   const handleLogout = () => {
@@ -225,17 +219,19 @@ function App() {
   // ─── Status label ─────────────────────────────────────────────
   const statusLabel = {
     idle:    '',
-    loading: ' · ⏳ מתחבר...',
-    ok:      ' · 🟢 מחובר',
-    offline: ' · 🔴 לא מחובר',
+    loading: ` · ⏳ ${t('connecting')}`,
+    ok:      ` · 🟢 ${t('connected')}`,
+    offline: ` · 🔴 ${t('disconnected')}`,
   }[dbStatus];
 
-  // ─── Show auth screen when not logged in ─────────────────────
+  // ─── Show auth when logged out ────────────────────────────────
   if (!username || !getToken()) {
     return <AuthPage onAuth={handleAuth} />;
   }
 
-  // ─── Main app ─────────────────────────────────────────────────
+  const isCopied = copyLabel !== null;
+
+  // ─── Render ───────────────────────────────────────────────────
   return (
     <div className="app">
       {/* ───── Header ───── */}
@@ -244,40 +240,44 @@ function App() {
           <div className="header-title">
             <span className="header-emoji">🛒</span>
             <div>
-              <h1 className="header-h1">רשימת קניות חכמה</h1>
+              <h1 className="header-h1">{t('appTitle')}</h1>
               <p className="header-sub">
-                שלום, <strong>{username}</strong> &middot; {items.length} פריטים
+                {t('hello')}, <strong>{username}</strong> &middot; {items.length} {t('items')}
                 <span className="db-badge">{statusLabel}</span>
               </p>
             </div>
           </div>
           <div className="header-actions">
-            <button className="btn btn-ghost" onClick={handlePrint} title="הדפס רשימה">
-              <span>🖨️</span><span className="btn-label">הדפס</span>
+            {/* Language toggle */}
+            <button className="btn btn-lang" onClick={toggleLang} title="Switch language">
+              <span>{t('langToggle')}</span>
+            </button>
+            <button className="btn btn-ghost" onClick={handlePrint} title={t('btnPrint')}>
+              <span>🖨️</span><span className="btn-label">{t('btnPrint')}</span>
             </button>
             <button
               className="btn btn-ghost"
               onClick={handleWordExport}
               disabled={wordLoading}
-              title="הורד מסמך Word"
+              title={t('btnWord')}
             >
-              <span>📄</span><span className="btn-label">{wordLoading ? '...' : 'Word'}</span>
+              <span>📄</span><span className="btn-label">{wordLoading ? '...' : t('btnWord')}</span>
             </button>
             <button
-              className={`btn ${copyLabel.startsWith('✓') ? 'btn-copied' : 'btn-whatsapp'}`}
+              className={`btn ${isCopied ? 'btn-copied' : 'btn-whatsapp'}`}
               onClick={handleCopy}
-              title="העתק רשימה לוואטסאפ"
+              title={t('btnCopy')}
             >
-              <span>📋</span><span className="btn-label">{copyLabel}</span>
+              <span>📋</span><span className="btn-label">{isCopied ? copyLabel : t('btnCopy')}</span>
             </button>
-            <button className="btn btn-ghost" onClick={() => setShowImport(true)} title="ייבא רשימה מטקסט">
-              <span>📥</span><span className="btn-label">ייבוא</span>
+            <button className="btn btn-ghost" onClick={() => setShowImport(true)} title={lang === 'en' ? 'Import list' : 'ייבוא'}>
+              <span>📥</span><span className="btn-label">{lang === 'en' ? 'Import' : 'ייבוא'}</span>
             </button>
             <button className="btn btn-white" onClick={openAdd}>
-              <span>+</span><span className="btn-label">הוסף פריט</span>
+              <span>+</span><span className="btn-label">{t('btnAdd')}</span>
             </button>
-            <button className="btn btn-logout" onClick={handleLogout} title="התנתק">
-              <span>🚪</span><span className="btn-label">יציאה</span>
+            <button className="btn btn-logout" onClick={handleLogout} title={t('btnLogout')}>
+              <span>🚪</span><span className="btn-label">{t('btnLogout')}</span>
             </button>
           </div>
         </div>
@@ -285,9 +285,10 @@ function App() {
 
       {/* ───── Print-only header ───── */}
       <div className="print-header print-only">
-        <h1 className="print-title">🛒 רשימת קניות</h1>
+        <h1 className="print-title">🛒 {t('wordTitle')}</h1>
         <p className="print-date">
-          תאריך: {new Date().toLocaleDateString('he-IL')} &nbsp;|&nbsp; {items.length} פריטים
+          {t('wordDate')} {new Date().toLocaleDateString(lang === 'en' ? 'en-US' : 'he-IL')}
+          &nbsp;|&nbsp; {items.length} {t('items')}
         </p>
       </div>
 
@@ -295,33 +296,35 @@ function App() {
         {/* Banner */}
         <div className="price-banner no-print">
           <span>ℹ️</span>
-          <span>המחירים משוערים בלבד לפי ממוצע סופרמרקטים בישראל. ייתכנו שינויים בין חנויות.</span>
+          <span>{t('priceBanner')}</span>
         </div>
 
-        {/* ───── Search bar ───── */}
+        {/* ───── Search ───── */}
         <div className="filter-bar no-print">
           <input
             className="search-input"
             type="text"
-            placeholder="🔍 חפש פריט..."
+            placeholder={t('searchPlaceholder')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            dir="rtl"
-            aria-label="חיפוש פריט"
+            dir={isRTL ? 'rtl' : 'ltr'}
+            aria-label={t('searchPlaceholder')}
           />
         </div>
 
         {/* ───── Items list ───── */}
-        <div className="items-list" role="list" aria-label="רשימת קניות">
+        <div className="items-list" role="list">
           {filteredItems.length === 0 ? (
             <div className="empty-state">
               <div className="empty-emoji">🛒</div>
               <p className="empty-text">
-                {search ? `לא נמצאו פריטים עבור "${search}"` : 'הרשימה ריקה — הוסף פריט!'}
+                {search
+                  ? t('noSearchResult', { q: search })
+                  : t('emptyList')}
               </p>
               {items.length === 0 && (
                 <button className="btn btn-outline" onClick={handleReset}>
-                  אפס לרשימה המקורית
+                  {t('resetList')}
                 </button>
               )}
             </div>
@@ -343,20 +346,19 @@ function App() {
       <div className="total-bar no-print">
         <div className="total-bar-inner">
           <div className="total-info">
-            <span className="total-label">סה״כ משוער</span>
+            <span className="total-label">{t('grandTotal')}</span>
             <span className="total-amount">₪{total.toFixed(2)}</span>
-            <span className="total-note">* הערכה בלבד</span>
+            <span className="total-note">{t('estimatedOnly')}</span>
           </div>
           <button className="btn btn-primary btn-add-main" onClick={openAdd}>
-            + הוסף פריט
+            + {t('btnAdd')}
           </button>
         </div>
       </div>
 
       {/* Print total */}
       <div className="print-total print-only">
-        <strong>סה״כ משוער לרשימה: ₪{total.toFixed(2)}</strong>
-        <div className="print-note">* המחירים משוערים בלבד</div>
+        <strong>{t('grandTotal')}: ₪{total.toFixed(2)}</strong>
       </div>
 
       {/* ───── Modals ───── */}

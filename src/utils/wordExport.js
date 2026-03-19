@@ -1,6 +1,6 @@
 /**
- * ייצוא רשימת קניות לקובץ Word (.docx) בעברית RTL
- * משתמש בספריית docx v8
+ * ייצוא רשימת קניות לקובץ Word (.docx)
+ * תומך בעברית (RTL) ואנגלית (LTR) בהתאם לפונקציית התרגום t()
  */
 
 import {
@@ -16,113 +16,90 @@ import {
 } from 'docx';
 import { saveAs } from 'file-saver';
 
-/**
- * יוצר תא טבלה עם טקסט בעברית RTL
- */
-function makeCell(text, { bold = false, width } = {}) {
-  const cellOptions = {
+function makeCell(text, { bold = false, rtl = true } = {}) {
+  return new TableCell({
     children: [
       new Paragraph({
         children: [
-          new TextRun({
-            text,
-            bold,
-            rightToLeft: true,
-            font: 'David',
-          }),
+          new TextRun({ text, bold, rightToLeft: rtl, font: rtl ? 'David' : 'Calibri' }),
         ],
-        alignment: AlignmentType.RIGHT,
-        bidirectional: true,
+        alignment: rtl ? AlignmentType.RIGHT : AlignmentType.LEFT,
+        bidirectional: rtl,
       }),
     ],
-  };
-  if (width) {
-    cellOptions.width = { size: width, type: WidthType.DXA };
-  }
-  return new TableCell(cellOptions);
+  });
 }
 
 /**
- * מייצא את רשימת הקניות לקובץ Word
- * @param {Array} items - מערך הפריטים
+ * @param {Array}    items  - רשימת הפריטים
+ * @param {Function} t      - פונקציית תרגום מה-i18n
  */
-export async function exportToWord(items) {
-  const dateStr = new Date().toLocaleDateString('he-IL', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
+export async function exportToWord(items, t) {
+  // fallback if called without t (e.g. tests)
+  const tr = t || ((k) => k);
+
+  const isHe = tr('langToggle') === 'EN'; // if toggle says "EN" → currently Hebrew
+  const locale = isHe ? 'he-IL' : 'en-US';
+  const rtl    = isHe;
+
+  const dateStr = new Date().toLocaleDateString(locale, {
+    year: 'numeric', month: 'long', day: 'numeric',
   });
 
-  // פריטים עם כמות 0 לא נכללים במסמך
   const activeItems = items.filter((item) => item.quantity > 0);
 
-  // שורת כותרת — שם פריט + כמות בלבד
   const headerRow = new TableRow({
     children: [
-      makeCell('שם פריט', { bold: true }),
-      makeCell('כמות', { bold: true }),
+      makeCell(tr('wordColName'), { bold: true, rtl }),
+      makeCell(tr('wordColQty'),  { bold: true, rtl }),
     ],
   });
 
-  // שורות פריטים (רק פריטים עם כמות > 0)
-  const itemRows = activeItems.map((item) => {
-    const status = item.completed ? ' ✓' : '';
-    return new TableRow({
+  const itemRows = activeItems.map((item) =>
+    new TableRow({
       children: [
-        makeCell(item.name + status),
-        makeCell(String(item.quantity) + ' ' + (item.unit || 'יח׳')),
+        makeCell(item.name, { rtl: true }), // names always RTL (Hebrew)
+        makeCell(`${item.quantity} ${item.unit || 'יח׳'}`, { rtl }),
       ],
-    });
-  });
+    })
+  );
 
-  const table = new Table({
-    rows: [headerRow, ...itemRows],
-    width: { size: 100, type: WidthType.PERCENTAGE },
-  });
+  const align = rtl ? AlignmentType.RIGHT : AlignmentType.LEFT;
 
   const doc = new Document({
-    sections: [
-      {
-        children: [
-          // כותרת ראשית
-          new Paragraph({
-            children: [
-              new TextRun({
-                text: 'רשימת קניות',
-                bold: true,
-                size: 40,
-                rightToLeft: true,
-                font: 'David',
-              }),
-            ],
-            alignment: AlignmentType.RIGHT,
-            bidirectional: true,
-            spacing: { after: 200 },
-          }),
-
-          // תאריך
-          new Paragraph({
-            children: [
-              new TextRun({
-                text: `תאריך: ${dateStr}`,
-                size: 22,
-                color: '6b7280',
-                rightToLeft: true,
-                font: 'David',
-              }),
-            ],
-            alignment: AlignmentType.RIGHT,
-            bidirectional: true,
-            spacing: { after: 400 },
-          }),
-
-          // טבלת פריטים
-          table,
-        ],
-      },
-    ],
+    sections: [{
+      children: [
+        new Paragraph({
+          children: [new TextRun({
+            text: tr('wordTitle'),
+            bold: true, size: 40,
+            rightToLeft: rtl,
+            font: rtl ? 'David' : 'Calibri',
+          })],
+          alignment: align,
+          bidirectional: rtl,
+          spacing: { after: 200 },
+        }),
+        new Paragraph({
+          children: [new TextRun({
+            text: `${tr('wordDate')} ${dateStr}`,
+            size: 22, color: '6b7280',
+            rightToLeft: rtl,
+            font: rtl ? 'David' : 'Calibri',
+          })],
+          alignment: align,
+          bidirectional: rtl,
+          spacing: { after: 400 },
+        }),
+        new Table({
+          rows: [headerRow, ...itemRows],
+          width: { size: 100, type: WidthType.PERCENTAGE },
+        }),
+      ],
+    }],
   });
 
   const blob = await Packer.toBlob(doc);
-  saveAs(blob, 'רשימת-קניות.docx');
+  const filename = isHe ? 'רשימת-קניות.docx' : 'grocery-list.docx';
+  saveAs(blob, filename);
 }

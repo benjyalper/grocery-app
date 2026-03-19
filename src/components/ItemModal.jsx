@@ -1,10 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useLanguage } from '../LanguageContext';
 
-/**
- * מודאל להוספה ועריכה של פריט
- * אם item !== null → מצב עריכה; אחרת → מצב הוספה
- */
 function ItemModal({ item, onSave, onClose }) {
+  const { t, isRTL } = useLanguage();
   const isEditing = !!item;
 
   const [name, setName]         = useState(item?.name     || '');
@@ -14,9 +12,7 @@ function ItemModal({ item, onSave, onClose }) {
 
   const nameRef = useRef(null);
 
-  useEffect(() => {
-    setTimeout(() => nameRef.current?.focus(), 50);
-  }, []);
+  useEffect(() => { setTimeout(() => nameRef.current?.focus(), 50); }, []);
 
   useEffect(() => {
     const handler = (e) => { if (e.key === 'Escape') onClose(); };
@@ -28,7 +24,7 @@ function ItemModal({ item, onSave, onClose }) {
     e.preventDefault();
     const trimmed = name.trim();
     if (!trimmed) { nameRef.current?.focus(); return; }
-    const qty = Math.max(1, parseInt(quantity, 10) || 1);
+    const qty = Math.max(0, parseInt(quantity, 10) || 0);
     const pr  = Math.max(0, parseFloat(price)     || 0);
     onSave({ name: trimmed, quantity: qty, price: pr, unit });
   };
@@ -40,18 +36,17 @@ function ItemModal({ item, onSave, onClose }) {
   return (
     <div className="modal-overlay" onClick={handleBackdropClick} role="dialog" aria-modal="true">
       <div className="modal">
-        {/* כותרת */}
         <div className="modal-header">
           <h2 className="modal-title">
-            {isEditing ? '✏️ ערוך פריט' : '➕ הוסף פריט חדש'}
+            {isEditing ? t('modalEditTitle') : t('modalAddTitle')}
           </h2>
-          <button className="modal-close" onClick={onClose} aria-label="סגור">×</button>
+          <button className="modal-close" onClick={onClose} aria-label={t('cancelBtn')}>×</button>
         </div>
 
         <form onSubmit={handleSubmit} noValidate>
-          {/* שם הפריט */}
+          {/* Item name — always RTL since names are Hebrew */}
           <div className="form-group">
-            <label className="form-label" htmlFor="item-name">שם הפריט *</label>
+            <label className="form-label" htmlFor="item-name">{t('itemNameLabel')}</label>
             <input
               ref={nameRef}
               id="item-name"
@@ -59,42 +54,42 @@ function ItemModal({ item, onSave, onClose }) {
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="לדוגמה: חלב, לחם, תפוחים..."
+              placeholder={t('itemNamePh')}
               required
               dir="rtl"
             />
           </div>
 
-          {/* יחידת מחיר */}
+          {/* Unit selector */}
           <div className="form-group">
-            <label className="form-label">מחיר לפי</label>
+            <label className="form-label">{t('pricingUnit')}</label>
             <div className="unit-selector">
               <button
                 type="button"
                 className={`unit-option${unit === 'יח׳' ? ' active' : ''}`}
                 onClick={() => setUnit('יח׳')}
               >
-                יח׳ — ליחידה
+                {t('perUnit')}
               </button>
               <button
                 type="button"
                 className={`unit-option${unit === 'ק"ג' ? ' active' : ''}`}
                 onClick={() => setUnit('ק"ג')}
               >
-                ק״ג — לקילו
+                {t('perKg')}
               </button>
             </div>
           </div>
 
-          {/* כמות ומחיר */}
+          {/* Quantity + price */}
           <div className="form-row">
             <div className="form-group">
-              <label className="form-label" htmlFor="item-qty">כמות</label>
+              <label className="form-label" htmlFor="item-qty">{t('qtyLabel')}</label>
               <input
                 id="item-qty"
                 className="form-input"
                 type="number"
-                min="1"
+                min="0"
                 value={quantity}
                 onChange={(e) => setQuantity(e.target.value)}
                 dir="ltr"
@@ -102,7 +97,7 @@ function ItemModal({ item, onSave, onClose }) {
             </div>
             <div className="form-group">
               <label className="form-label" htmlFor="item-price">
-                מחיר משוער (₪ / {unit})
+                {t('priceLabel', { unit })}
               </label>
               <input
                 id="item-price"
@@ -118,13 +113,12 @@ function ItemModal({ item, onSave, onClose }) {
             </div>
           </div>
 
-          {/* כפתורים */}
           <div className="modal-footer">
             <button type="submit" className="btn btn-primary">
-              {isEditing ? '💾 שמור שינויים' : '➕ הוסף לרשימה'}
+              {isEditing ? t('saveBtn') : t('addBtn')}
             </button>
             <button type="button" className="btn btn-cancel" onClick={onClose}>
-              ביטול
+              {t('cancelBtn')}
             </button>
           </div>
         </form>

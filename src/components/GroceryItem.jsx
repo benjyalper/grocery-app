@@ -1,10 +1,8 @@
 import React, { useState, useRef } from 'react';
+import { useLanguage } from '../LanguageContext';
 
-/**
- * רכיב פריט ברשימת הקניות
- * מציג שם, כמות, יחידה (יח׳/ק"ג), מחיר ליחידה (ניתן לעריכה), סה"כ לפריט
- */
 function GroceryItem({ item, onRemove, onUpdate, onEdit }) {
+  const { t, isRTL } = useLanguage();
   const unit     = item.unit || 'יח׳';
   const subtotal = (item.price * item.quantity).toFixed(2);
 
@@ -47,7 +45,13 @@ function GroceryItem({ item, onRemove, onUpdate, onEdit }) {
 
       {/* ── Item details ── */}
       <div className="item-content">
-        <div className="item-name" onClick={() => onEdit(item)} title="לחץ לעריכה">
+        <div
+          className="item-name"
+          onClick={() => onEdit(item)}
+          title={t('editItem')}
+          /* item names are always Hebrew regardless of UI lang */
+          dir="rtl"
+        >
           {item.name}
         </div>
 
@@ -56,8 +60,8 @@ function GroceryItem({ item, onRemove, onUpdate, onEdit }) {
           <button
             className={`unit-toggle unit-toggle--${unit === 'ק"ג' ? 'kg' : 'unit'}`}
             onClick={toggleUnit}
-            title={`החלף ל${unit === 'יח׳' ? 'ק"ג' : 'יח׳'}`}
-            aria-label={`יחידה: ${unit} — לחץ להחלפה`}
+            title={t('unitToggleTitle')}
+            aria-label={`${t('unitToggleTitle')}: ${unit}`}
           >
             {unit}
           </button>
@@ -76,7 +80,7 @@ function GroceryItem({ item, onRemove, onUpdate, onEdit }) {
                 onChange={(e) => setPriceVal(e.target.value)}
                 onBlur={commitPrice}
                 onKeyDown={handlePriceKey}
-                aria-label="עריכת מחיר"
+                aria-label={t('priceLabel', { unit })}
                 dir="ltr"
               />
               <span className="price-edit-label">/ {unit}</span>
@@ -85,7 +89,7 @@ function GroceryItem({ item, onRemove, onUpdate, onEdit }) {
             <span
               className="item-unit-price"
               onClick={startPriceEdit}
-              title="לחץ לעריכת מחיר"
+              title={t('editItem')}
               role="button"
               tabIndex={0}
               onKeyDown={(e) => e.key === 'Enter' && startPriceEdit()}
@@ -94,22 +98,31 @@ function GroceryItem({ item, onRemove, onUpdate, onEdit }) {
             </span>
           )}
 
-          <span className="item-subtotal">סה״כ: ₪{subtotal}</span>
+          <span className="item-subtotal">{t('subtotal')} ₪{subtotal}</span>
         </div>
       </div>
 
       {/* ── Quantity ── */}
       <div className="qty-controls no-print">
-        <button className="qty-btn" onClick={() => item.quantity > 0 && onUpdate(item.id, { quantity: item.quantity - 1 })} aria-label="הפחת כמות">−</button>
+        <button
+          className="qty-btn"
+          onClick={() => item.quantity > 0 && onUpdate(item.id, { quantity: item.quantity - 1 })}
+          aria-label={t('decreaseQty')}
+        >−</button>
         <input
           className="qty-input"
           type="number"
           min="0"
           value={item.quantity}
           onChange={handleQtyChange}
-          aria-label="כמות"
+          aria-label={t('qty')}
+          dir="ltr"
         />
-        <button className="qty-btn" onClick={() => onUpdate(item.id, { quantity: item.quantity + 1 })} aria-label="הגדל כמות">+</button>
+        <button
+          className="qty-btn"
+          onClick={() => onUpdate(item.id, { quantity: item.quantity + 1 })}
+          aria-label={t('increaseQty')}
+        >+</button>
       </div>
 
       {/* כמות להדפסה */}
@@ -117,8 +130,8 @@ function GroceryItem({ item, onRemove, onUpdate, onEdit }) {
 
       {/* ── Actions ── */}
       <div className="item-actions no-print">
-        <button className="action-btn edit-btn" onClick={() => onEdit(item)} title="ערוך פריט" aria-label="ערוך פריט">✏️</button>
-        <button className="action-btn remove-btn" onClick={() => onRemove(item.id)} title="הסר פריט" aria-label="הסר פריט">🗑️</button>
+        <button className="action-btn edit-btn"   onClick={() => onEdit(item)}     title={t('editItem')}   aria-label={t('editItem')}>✏️</button>
+        <button className="action-btn remove-btn" onClick={() => onRemove(item.id)} title={t('removeItem')} aria-label={t('removeItem')}>🗑️</button>
       </div>
     </div>
   );

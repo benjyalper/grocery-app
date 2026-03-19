@@ -1,11 +1,10 @@
 import React, { useState } from 'react';
 import { apiLogin, apiRegister } from '../api';
+import { useLanguage } from '../LanguageContext';
 
-/**
- * מסך התחברות / הרשמה
- * mode: 'login' | 'register'
- */
 function AuthPage({ onAuth }) {
+  const { t, lang, toggle: toggleLang, isRTL } = useLanguage();
+
   const [mode, setMode]         = useState('login');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -39,71 +38,69 @@ function AuthPage({ onAuth }) {
   return (
     <div className="auth-overlay">
       <div className="auth-card">
+        {/* Language toggle — top corner */}
+        <button className="auth-lang-toggle" onClick={toggleLang} title="Switch language">
+          {t('langToggle')}
+        </button>
+
         {/* Logo */}
         <div className="auth-logo">🛒</div>
-        <h1 className="auth-title">רשימת קניות חכמה</h1>
+        <h1 className="auth-title">{t('appTitle')}</h1>
         <p className="auth-subtitle">
-          {isLogin ? 'התחבר לחשבון שלך' : 'צור חשבון חדש'}
+          {isLogin ? t('loginTitle') : t('registerTitle')}
         </p>
 
         <form onSubmit={handleSubmit} className="auth-form" noValidate>
-          {/* Username */}
           <div className="auth-field">
-            <label className="auth-label" htmlFor="auth-username">שם משתמש</label>
+            <label className="auth-label" htmlFor="auth-username">{t('usernameLabel')}</label>
             <input
               id="auth-username"
               className="auth-input"
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="לדוגמה: משפחת לוי"
+              placeholder={lang === 'en' ? 'e.g. Smith family' : 'לדוגמה: משפחת לוי'}
               autoComplete="username"
-              dir="rtl"
+              dir={isRTL ? 'rtl' : 'ltr'}
               required
             />
           </div>
 
-          {/* Password */}
           <div className="auth-field">
-            <label className="auth-label" htmlFor="auth-password">סיסמה</label>
+            <label className="auth-label" htmlFor="auth-password">{t('passwordLabel')}</label>
             <input
               id="auth-password"
               className="auth-input"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder={isLogin ? '••••••••' : 'לפחות 4 תווים'}
+              placeholder={isLogin ? '••••••••' : (lang === 'en' ? 'At least 4 characters' : 'לפחות 4 תווים')}
               autoComplete={isLogin ? 'current-password' : 'new-password'}
               dir="ltr"
               required
             />
           </div>
 
-          {/* Error */}
           {error && <div className="auth-error">⚠️ {error}</div>}
 
-          {/* Submit */}
           <button
             type="submit"
             className="auth-btn"
             disabled={loading || !username || !password}
           >
-            {loading ? '⏳ מתחבר...' : isLogin ? '🔑 התחבר' : '✅ הרשם'}
+            {loading
+              ? `⏳ ${t('connecting')}`
+              : isLogin ? t('loginBtn') : t('registerBtn')}
           </button>
         </form>
 
-        {/* Switch mode */}
         <div className="auth-switch">
-          {isLogin ? 'אין לך חשבון עדיין?' : 'כבר יש לך חשבון?'}
-          {' '}
           <button className="auth-switch-btn" onClick={switchMode} type="button">
-            {isLogin ? 'הרשם עכשיו' : 'התחבר'}
+            {isLogin ? t('goRegister') : t('goLogin')}
           </button>
         </div>
 
-        <p className="auth-note">
-          כל משתמש מקבל רשימת קניות נפרדת ופרטית 🔒
-        </p>
+        <p className="auth-note">{t('privacyNote')}</p>
       </div>
     </div>
   );
