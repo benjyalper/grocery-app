@@ -1,51 +1,53 @@
-import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { DEFAULT_ITEMS } from './data/items';
-import GroceryItem from './components/GroceryItem';
-import ItemModal from './components/ItemModal';
+import GroceryItem  from './components/GroceryItem';
+import ItemModal    from './components/ItemModal';
+import AuthPage     from './components/AuthPage';
+import ImportModal  from './components/ImportModal';
 import { exportToWord } from './utils/wordExport';
-import { apiGetItems, apiUpsertItem, apiDeleteItem, apiSeedItems } from './api';
+import {
+  apiGetItems, apiUpsertItem, apiDeleteItem, apiSeedItems,
+  getToken, getUsername, clearAuth,
+} from './api';
 
-const STORAGE_KEY = 'grocery-items-v2'; // localStorage cache (fast load)
+const STORAGE_KEY = 'grocery-items-v2';
 
 function genId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2);
 }
 
-/**
- * האפליקציה הראשית — רשימת קניות חכמה
- * שומרת ב-PostgreSQL (דרך Express API) + localStorage כ-cache
- */
 function App() {
-  // ─── State ───────────────────────────────────────────────────
+  // ─── Auth state ──────────────────────────────────────────────
+  // username is null when logged out, string when logged in
+  const [username, setUsername] = useState(() => getUsername());
+
+  // ─── Items state ─────────────────────────────────────────────
   const [items, setItems] = useState(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       return saved ? JSON.parse(saved) : DEFAULT_ITEMS;
-    } catch {
-      return DEFAULT_ITEMS;
-    }
+    } catch { return DEFAULT_ITEMS; }
   });
 
-  const [search, setSearch]         = useState('');
-  const [showModal, setShowModal]   = useState(false);
+  const [search, setSearch]           = useState('');
+  const [showModal, setShowModal]     = useState(false);
   const [editingItem, setEditingItem] = useState(null);
-  const [wordLoading, setWordLoading]   = useState(false);
-  const [copyLabel, setCopyLabel]       = useState('העתק');
-  // 'idle' | 'loading' | 'ok' | 'offline'
-  const [dbStatus, setDbStatus]     = useState('idle');
+  const [showImport, setShowImport]   = useState(false);
+  const [wordLoading, setWordLoading] = useState(false);
+  const [copyLabel, setCopyLabel]     = useState('העתק');
+  const [dbStatus, setDbStatus]       = useState('idle');
 
-  // Track which IDs have pending sync so we don't race
-  const pendingRef = useRef(new Set());
-
-  // ─── Load from DB on mount ───────────────────────────────────
+  // ─── Load from DB whenever user logs in ──────────────────────
   useEffect(() => {
+    if (!username) return; // not logged in
+    if (!getToken()) return;
+
     setDbStatus('loading');
     apiGetItems()
       .then((rows) => {
         if (rows.length > 0) {
           setItems(rows);
         } else {
-          // DB is empty — seed with defaults
           const fresh = DEFAULT_ITEMS.map((i) => ({ ...i }));
           setItems(fresh);
           apiSeedItems(fresh).catch(console.error);
@@ -53,33 +55,33 @@ function App() {
         setDbStatus('ok');
       })
       .catch((err) => {
-        console.warn('DB unavailable, using localStorage:', err.message);
+        console.warn('DB unavailable:', err.message);
         setDbStatus('offline');
       });
-  }, []);
+  }, [username]);
 
-  // ─── Persist to localStorage (fast cache) ────────────────────
+  // ─── Persist to localStorage ─────────────────────────────────
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
   }, [items]);
 
   // ─── DB helpers ───────────────────────────────────────────────
   const dbUpsert = useCallback((item) => {
-    if (dbStatus === 'offline') return;
+    if (dbStatus === 'offline' || !getToken()) return;
     apiUpsertItem(item).catch(console.error);
   }, [dbStatus]);
 
   const dbDelete = useCallback((id) => {
-    if (dbStatus === 'offline') return;
+    if (dbStatus === 'offline' || !getToken()) return;
     apiDeleteItem(id).catch(console.error);
   }, [dbStatus]);
 
   // ─── Derived values ───────────────────────────────────────────
-  const filteredItems = useMemo(() => items.filter((item) => {
-    return search === '' || item.name.includes(search);
-  }), [items, search]);
+  const filteredItems = useMemo(() =>
+    items.filter((item) => search === '' || item.name.includes(search)),
+    [items, search]
+  );
 
-  // סה"כ: פריטים עם כמות 0 לא נספרים
   const total = useMemo(
     () => items.reduce((sum, i) => sum + i.price * i.quantity, 0),
     [items]
@@ -115,15 +117,39 @@ function App() {
     dbDelete(id);
   };
 
+  // ─── Import from text ─────────────────────────────────────────
+  const handleImport = (parsedItems) => {
+    const newItems = parsedItems.map((p) => ({
+      id: genId(),
+      name: p.name,
+      quantity: p.quantity,
+      price: p.price,
+      unit: p.unit || 'יח׳',
+      completed: false,
+    }));
+    setItems((prev) => {
+      const merged = [...prev];
+      newItems.forEach((ni) => {
+        const exists = merged.find(
+          (ex) => ex.name.trim().toLowerCase() === ni.name.trim().toLowerCase()
+        );
+        if (!exists) {
+          merged.push(ni);
+          dbUpsert(ni);
+        }
+      });
+      return merged;
+    });
+  };
+
   // ─── Modal handlers ───────────────────────────────────────────
-  const openAdd    = () => { setEditingItem(null); setShowModal(true); };
-  const openEdit   = (item) => { setEditingItem(item); setShowModal(true); };
+  const openAdd  = () => { setEditingItem(null); setShowModal(true); };
+  const openEdit = (item) => { setEditingItem(item); setShowModal(true); };
 
   const handleModalSave = (data) => {
-    // בדיקת כפילות שם (לא תלוי רישיות, ללא רווחים מיותרים)
     const newName = data.name.trim().toLowerCase();
     const duplicate = items.find((i) => {
-      if (editingItem && i.id === editingItem.id) return false; // לא לבדוק את הפריט עצמו בעריכה
+      if (editingItem && i.id === editingItem.id) return false;
       return i.name.trim().toLowerCase() === newName;
     });
     if (duplicate) {
@@ -140,31 +166,22 @@ function App() {
 
   const handleModalClose = () => { setShowModal(false); setEditingItem(null); };
 
-  // ─── Print & Word ─────────────────────────────────────────────
+  // ─── Print & export ───────────────────────────────────────────
   const handlePrint = () => window.print();
 
-  // ─── Copy as plain text (WhatsApp-friendly) ───────────────────
   const handleCopy = async () => {
     const activeItems = items.filter((i) => i.quantity > 0);
     const dateStr = new Date().toLocaleDateString('he-IL', {
       year: 'numeric', month: 'long', day: 'numeric',
     });
-
     const lines = [
       `🛒 רשימת קניות — ${dateStr}`,
       '',
-      ...activeItems.map((i) => {
-        const qty = `${i.quantity} ${i.unit || 'יח׳'}`;
-        return `🔲 ${i.name} — ${qty}`;
-      }),
+      ...activeItems.map((i) => `🔲 ${i.name} — ${i.quantity} ${i.unit || 'יח׳'}`),
     ];
-
     try {
       await navigator.clipboard.writeText(lines.join('\n'));
-      setCopyLabel('✓ הועתק!');
-      setTimeout(() => setCopyLabel('העתק'), 2200);
     } catch {
-      // Fallback for browsers/iOS that block clipboard without interaction
       const ta = document.createElement('textarea');
       ta.value = lines.join('\n');
       ta.style.cssText = 'position:fixed;opacity:0;';
@@ -172,24 +189,37 @@ function App() {
       ta.focus(); ta.select();
       document.execCommand('copy');
       document.body.removeChild(ta);
-      setCopyLabel('✓ הועתק!');
-      setTimeout(() => setCopyLabel('העתק'), 2200);
     }
+    setCopyLabel('✓ הועתק!');
+    setTimeout(() => setCopyLabel('העתק'), 2200);
   };
 
   const handleWordExport = async () => {
     setWordLoading(true);
-    try   { await exportToWord(items); }
-    catch (err) { console.error(err); alert('שגיאה ביצירת קובץ Word:\n' + err.message); }
+    try { await exportToWord(items); }
+    catch (err) { alert('שגיאה ביצירת קובץ Word:\n' + err.message); }
     finally { setWordLoading(false); }
   };
 
   // ─── Reset ────────────────────────────────────────────────────
   const handleReset = async () => {
-    if (!window.confirm('האם לאפס את הרשימה לרשימה המקורית? פעולה זו תמחק שינויים.')) return;
+    if (!window.confirm('האם לאפס את הרשימה לרשימה המקורית?')) return;
     const fresh = DEFAULT_ITEMS.map((i) => ({ ...i }));
     setItems(fresh);
     apiSeedItems(fresh).catch(console.error);
+  };
+
+  // ─── Auth ─────────────────────────────────────────────────────
+  const handleAuth = (uname) => {
+    setUsername(uname);
+    setItems(DEFAULT_ITEMS.map((i) => ({ ...i }))); // clear stale cache
+  };
+
+  const handleLogout = () => {
+    clearAuth();
+    setUsername(null);
+    setItems([]);
+    localStorage.removeItem(STORAGE_KEY);
   };
 
   // ─── Status label ─────────────────────────────────────────────
@@ -200,7 +230,12 @@ function App() {
     offline: ' · 🔴 לא מחובר',
   }[dbStatus];
 
-  // ─── Render ───────────────────────────────────────────────────
+  // ─── Show auth screen when not logged in ─────────────────────
+  if (!username || !getToken()) {
+    return <AuthPage onAuth={handleAuth} />;
+  }
+
+  // ─── Main app ─────────────────────────────────────────────────
   return (
     <div className="app">
       {/* ───── Header ───── */}
@@ -211,7 +246,7 @@ function App() {
             <div>
               <h1 className="header-h1">רשימת קניות חכמה</h1>
               <p className="header-sub">
-                {items.length} פריטים
+                שלום, <strong>{username}</strong> &middot; {items.length} פריטים
                 <span className="db-badge">{statusLabel}</span>
               </p>
             </div>
@@ -235,8 +270,14 @@ function App() {
             >
               <span>📋</span><span className="btn-label">{copyLabel}</span>
             </button>
+            <button className="btn btn-ghost" onClick={() => setShowImport(true)} title="ייבא רשימה מטקסט">
+              <span>📥</span><span className="btn-label">ייבוא</span>
+            </button>
             <button className="btn btn-white" onClick={openAdd}>
               <span>+</span><span className="btn-label">הוסף פריט</span>
+            </button>
+            <button className="btn btn-logout" onClick={handleLogout} title="התנתק">
+              <span>🚪</span><span className="btn-label">יציאה</span>
             </button>
           </div>
         </div>
@@ -318,12 +359,18 @@ function App() {
         <div className="print-note">* המחירים משוערים בלבד</div>
       </div>
 
-      {/* ───── Modal ───── */}
+      {/* ───── Modals ───── */}
       {showModal && (
         <ItemModal
           item={editingItem}
           onSave={handleModalSave}
           onClose={handleModalClose}
+        />
+      )}
+      {showImport && (
+        <ImportModal
+          onImport={handleImport}
+          onClose={() => setShowImport(false)}
         />
       )}
     </div>
