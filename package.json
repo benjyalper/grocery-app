@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "concurrently \"vite --port 3006\" \"node server.js\"",
+    "prebuild": "node generate-icon.js",
     "build": "vite build",
     "start": "NODE_ENV=production node server.js",
     "preview": "vite preview"
